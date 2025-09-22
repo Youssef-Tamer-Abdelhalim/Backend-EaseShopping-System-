@@ -3,7 +3,9 @@ const path = require("path");
 const express = require("express");
 
 require("./utils/env");
+const cors = require('cors')
 const morgan = require("morgan"); 
+const compression = require('compression')
 
 const dbConnection = require("./config/database");
 const globalErrorHandler = require("./middleware/errorMiddleware");
@@ -13,6 +15,45 @@ const mountRoute = require("./routes/index")
 
 // create a new express app instance and use express.json middleware to parse request bodies
 const app = express();
+/* -------------------------------- CORS -------------------------------- */
+// ضع في .env مثلا:
+// CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:5173,https://myapp.com
+const allowedOrigins = (process.env.CORS_ORIGINS || "")
+  .split(",")
+  .map(o => o.trim())
+  .filter(Boolean);
+
+app.use(
+  cors({
+    origin: (origin, cb) => {
+      // السماح لطلبات أدوات مثل Postman (بدون origin)
+      if (!origin) return cb(null, true);
+      if (
+        allowedOrigins.length === 0 || 
+        allowedOrigins.includes(origin)
+      ) {
+        return cb(null, true);
+      }
+      return cb(new Error("CORS: Origin not allowed"));
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    exposedHeaders: ["X-Total-Count"],
+    optionsSuccessStatus: 204
+  })
+);
+
+// اختياري: تأكيد رد سريع على أي طلب OPTIONS لم تُغطِّه راوترات مخصّصة
+app.use((req, res, next) => {
+  if (req.method === "OPTIONS") return res.sendStatus(204);
+  next();
+});
+/* ------------------------------ END CORS ------------------------------ */
+
+// compress all responses
+app.use(compression());
+
 app.set('query parser', 'extended');
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'uploads')));
@@ -39,8 +80,6 @@ app.use(globalErrorHandler);
 
 // --- start server function ---
 const startServer = async () => {
-  // استنى progress يخلص قبل ما تفتح الـ server
-
 
   // import database connection
   dbConnection();
