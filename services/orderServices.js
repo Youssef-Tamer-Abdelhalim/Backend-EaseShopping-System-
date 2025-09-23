@@ -7,6 +7,7 @@ const ApiError = require("../utils/apiError");
 const Order = require("../models/orderModel");
 const Cart = require("../models/cartModel");
 const Product = require("../models/productModel");
+const User = require("../models/userModel");
 
 // @desc    Create new order
 // @route   POST /api/v1/orders/:cartId
@@ -186,9 +187,43 @@ exports.getCheckoutSession = asyncHandler(async (req, res, next) => {
   });
 });
 
+const createCardOrder = async (session) => { 
+  // 1) get cart, user & order price
+  const cartId = session.client_reference_id;
+  const shippingAddress = session.metadata;
+  const orderPrice = session.amount_total / 100;
+  const cart = await Cart.findById(cartId);
+  const user = await User.findOne({ email: session.customer_email });
+
+  // 2) create order with payment method (card)
+    const order = await Order.create({
+    user: user._id,
+    cartItems: cart.cartItems,
+    shippingAddress,
+    totalOrderPrice: orderPrice,
+    isPaid: true,
+    paidAt: Date.now(),
+    paymentMethod: "card",
+  });
+
+  // 3) After creating order, decrement product quantity, increment sold
+  if (order) {
+    const bulkOptoin = cart.cartItems.map((item) => ({
+      updateOne: {
+        filter: { _id: item.product },
+        update: { $inc: { quantity: -item.quantity, sold: +item.quantity } },
+      },
+    }));
+    await Product.bulkWrite(bulkOptoin, {});
+
+    // 4) clear cart based on cartId from params
+    await Cart.findByIdAndDelete(cartId);
+  }
+}
+
 // @desc    webhook checkout handler
 // @route   POST /webhook-checkout
-// @access  Public
+// @access  Private = user 
 exports.webhookCheckoutHandler = asyncHandler(async (req, res, next) => {
   const sig = req.headers["stripe-signature"];
   let event;
@@ -203,6 +238,8 @@ exports.webhookCheckoutHandler = asyncHandler(async (req, res, next) => {
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
   if (event.type === "checkout.session.completed") {
-    console.log("create order");
+    createCardOrder(event.data.object);
   }
+
+  res.status(200).json({ received: true });
 });
