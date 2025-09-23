@@ -10,6 +10,7 @@ const compression = require('compression')
 const dbConnection = require("./config/database");
 const globalErrorHandler = require("./middleware/errorMiddleware");
 const ApiError = require("./utils/apiError");
+const { webhookCheckoutHandler } = require("./services/orderServices")
 
 const mountRoute = require("./routes/index")
 
@@ -53,6 +54,10 @@ app.use((req, res, next) => {
 
 // compress all responses
 app.use(compression());
+
+// checkout webhook
+app.post('/webhook-checkout', express.raw({ type: 'application/json' }), webhookCheckoutHandler);
+
 
 app.set('query parser', 'extended');
 app.use(express.json());
