@@ -173,8 +173,8 @@ exports.getCheckoutSession = asyncHandler(async (req, res, next) => {
       },
     ],
     mode: "payment",
-    success_url: `${req.protocol}://${req.get("host")}/api/v1/orders`,
-    cancel_url: `${req.protocol}://${req.get("host")}/api/v1/cart`,
+    success_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/checkout/cancel`,
     customer_email: req.user.email,
     client_reference_id: req.params.cartId,
     metadata,
@@ -187,47 +187,59 @@ exports.getCheckoutSession = asyncHandler(async (req, res, next) => {
   });
 });
 
-const createCardOrder = async (session) => { 
-  // 1) get cart, user & order price
-  const cartId = session.client_reference_id;
- // const shippingAddress = session.metadata;
-  const orderPrice = session.amount_total / 100;
-  const cart = await Cart.findById(cartId);
-//  const user = await User.findOne({ email: session.customer_email });
+// ...existing code...
+const createCardOrder = async (session) => {
+  try {
+    const cartId = session.client_reference_id;
+    const cart = await Cart.findById(cartId);
+    if (!cart) return; // لا يوجد كارت -> تجاهل بهدوء
 
-  // 2) create order with payment method (card)
-    const order = await Order.create({
-  //  user: user._id,
-    cartItems: cart.cartItems,
- //   shippingAddress,
-    totalOrderPrice: orderPrice,
-    isPaid: true,
-    paidAt: Date.now(),
-    paymentMethod: "card",
-  });
-
-  // 3) After creating order, decrement product quantity, increment sold
-  if (order) {
-    const bulkOptoin = cart.cartItems.map((item) => ({
-      updateOne: {
-        filter: { _id: item.product },
-        update: { $inc: { quantity: -item.quantity, sold: +item.quantity } },
+    // إعادة بناء عنوان الشحن من metadata
+    const md = session.metadata || {};
+    const shippingAddress = {
+      details: md.details || md.address || "",
+      phone: md.phone || "",
+      city: md.city || "",
+      postalCode: md.postalCode || "",
+      country: {
+        code: md["country code"] || md.countryCode || md.country_code || "EG",
+        name: md["country name"] || md.countryName || md.country_name || "Egypt",
       },
-    }));
-    await Product.bulkWrite(bulkOptoin, {});
+    };
 
-    // 4) clear cart based on cartId from params
-    await Cart.findByIdAndDelete(cartId);
+    const user = await User.findOne({ email: session.customer_email });
+    if (!user) return; // مستخدم غير موجود
+
+    const orderPrice = session.amount_total / 100;
+
+    const order = await Order.create({
+      user: user._id,
+      cartItems: cart.cartItems,
+      shippingAddress,
+      totalOrderPrice: orderPrice,
+      paymentMethodType: "online",
+      isPaid: true,
+      paidAt: Date.now()
+    });
+
+    if (order) {
+      const bulkOption = cart.cartItems.map((item) => ({
+        updateOne: {
+          filter: { _id: item.product },
+          update: { $inc: { quantity: -item.quantity, sold: +item.quantity } },
+        },
+      }));
+      await Product.bulkWrite(bulkOption, {});
+      await Cart.findByIdAndDelete(cartId);
+    }
+  } catch (err) {
+    console.error("createCardOrder error:", err.message);
   }
-}
-
-// @desc    webhook checkout handler
-// @route   POST /webhook-checkout
-// @access  Private = user 
+};
+// ...existing code...
 exports.webhookCheckoutHandler = asyncHandler(async (req, res, next) => {
   const sig = req.headers["stripe-signature"];
   let event;
-
   try {
     event = stripe.webhooks.constructEvent(
       req.body,
@@ -237,9 +249,11 @@ exports.webhookCheckoutHandler = asyncHandler(async (req, res, next) => {
   } catch (err) {
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
+
   if (event.type === "checkout.session.completed") {
-    createCardOrder(event.data.object);
+    await createCardOrder(event.data.object); // إضافة await
   }
 
-  res.status(200).json({ received: true, Type: event.type });
- });
+  res.status(200).json({ received: true, type: event.type });
+});
+// ...existing code...
