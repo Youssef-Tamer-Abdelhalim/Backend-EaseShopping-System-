@@ -193,11 +193,11 @@ const createCardOrder = async (session) => {
  // const shippingAddress = session.metadata;
   const orderPrice = session.amount_total / 100;
   const cart = await Cart.findById(cartId);
-  const user = await User.findOne({ email: session.customer_email });
+//  const user = await User.findOne({ email: session.customer_email });
 
   // 2) create order with payment method (card)
     const order = await Order.create({
-    user: user._id,
+  //  user: user._id,
     cartItems: cart.cartItems,
  //   shippingAddress,
     totalOrderPrice: orderPrice,
