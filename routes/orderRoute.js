@@ -5,7 +5,7 @@ const {
   getOrderById,
   filterOrderForLoggedUser,
   updateOrderToDelivered,
-  updateOrderToPaid,
+  updateCashOrderToPaid,
   getCheckoutSession,
 } = require("../services/orderServices");
 
@@ -26,7 +26,7 @@ router.get("/:id", authServices.allowedTo("admin", "manager"), getOrderById);
 
 
 router.patch("/:id/deliver", authServices.allowedTo("admin", "manager"), updateOrderToDelivered);
-router.patch("/:id/pay", authServices.allowedTo("admin", "manager"), updateOrderToPaid);
+router.patch("/:id/pay", authServices.allowedTo("admin", "manager"), updateCashOrderToPaid);
 
 router.get(
   "/",

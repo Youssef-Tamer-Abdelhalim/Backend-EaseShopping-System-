@@ -58,6 +58,8 @@ exports.createOrder = asyncHandler(async (req, res, next) => {
   }
 });
 
+// @desc    Filter orders for logged user
+// @access  Private
 exports.filterOrderForLoggedUser = asyncHandler(async (req, res, next) => {
   if (req.user.role === "user") req.filter = { user: req.user._id };
   next();
@@ -76,7 +78,7 @@ exports.getOrderById = factory.getOne(Order);
 // @desc    update order paid status to paid
 // @route   PUT /api/v1/orders/:id/pay
 // @access  Private
-exports.updateOrderToPaid = asyncHandler(async (req, res, next) => {
+exports.updateCashOrderToPaid = asyncHandler(async (req, res, next) => {
   const order = await Order.findById(req.params.id);
   if (!order) {
     return next(
@@ -86,28 +88,6 @@ exports.updateOrderToPaid = asyncHandler(async (req, res, next) => {
 
   order.isPaid = true;
   order.paidAt = Date.now();
-
-  const updatedOrder = await order.save();
-
-  res.status(200).json({
-    status: "success",
-    data: updatedOrder,
-  });
-});
-
-// @desc    update order delivery status to delivered
-// @route   PUT /api/v1/orders/:id/deliver
-// @access  Private
-exports.updateOrderToDelivered = asyncHandler(async (req, res, next) => {
-  const order = await Order.findById(req.params.id);
-  if (!order) {
-    return next(
-      new ApiError(`No order found with this id ${req.params.id}`, 404)
-    );
-  }
-
-  order.isDelivered = true;
-  order.deliveredAt = Date.now();
 
   const updatedOrder = await order.save();
 
@@ -187,7 +167,7 @@ exports.getCheckoutSession = asyncHandler(async (req, res, next) => {
   });
 });
 
-// ...existing code...
+
 const createCardOrder = async (session) => {
   try {
     const cartId = session.client_reference_id;
@@ -236,7 +216,10 @@ const createCardOrder = async (session) => {
     console.error("createCardOrder error:", err.message);
   }
 };
-// ...existing code...
+
+// @desc    Stripe webhook checkout session handler
+// @route   POST /webhook-checkout
+// @access  Private
 exports.webhookCheckoutHandler = asyncHandler(async (req, res, next) => {
   const sig = req.headers["stripe-signature"];
   let event;
@@ -251,9 +234,30 @@ exports.webhookCheckoutHandler = asyncHandler(async (req, res, next) => {
   }
 
   if (event.type === "checkout.session.completed") {
-    await createCardOrder(event.data.object); // إضافة await
+    await createCardOrder(event.data.object);
   }
 
-  res.status(200).json({ received: true, type: event.type });
+  res.status(200).json({ received: true });
 });
-// ...existing code...
+
+// @desc    update order delivery status to delivered
+// @route   PUT /api/v1/orders/:id/deliver
+// @access  Private
+exports.updateOrderToDelivered = asyncHandler(async (req, res, next) => {
+  const order = await Order.findById(req.params.id);
+  if (!order) {
+    return next(
+      new ApiError(`No order found with this id ${req.params.id}`, 404)
+    );
+  }
+
+  order.isDelivered = true;
+  order.deliveredAt = Date.now();
+
+  const updatedOrder = await order.save();
+
+  res.status(200).json({
+    status: "success",
+    data: updatedOrder,
+  });
+});
