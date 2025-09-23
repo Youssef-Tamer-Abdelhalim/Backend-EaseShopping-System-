@@ -241,5 +241,5 @@ exports.webhookCheckoutHandler = asyncHandler(async (req, res, next) => {
     createCardOrder(event.data.object);
   }
 
-  res.status(200).json({ received: true });
-});
+  res.status(200).json({ received: true, Type: event.type });
+ });
