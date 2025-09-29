@@ -41,7 +41,7 @@ const orderSchema = new mongoose.Schema(
     paymentMethodType: {
       type: String,
       enum: ["online", "cash"],
-      default: "online",
+      default: "cash",
     },
     isPaid: { type: Boolean, default: false },
     paidAt: Date,

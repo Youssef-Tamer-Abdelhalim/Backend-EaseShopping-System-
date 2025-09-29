@@ -188,7 +188,7 @@ const createCardOrder = async (session) => {
     };
 
     const user = await User.findOne({ email: session.customer_email });
-    if (!user) return; // مستخدم غير موجود
+    if (!user) return; 
 
     const orderPrice = session.amount_total / 100;
 
