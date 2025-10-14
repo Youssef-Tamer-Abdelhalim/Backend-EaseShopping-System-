@@ -90,7 +90,7 @@ exports.protect = asyncHandler(async (req, res, next) => {
     if (decoded.iat < changedTimestamp) {
       return next(
         new ApiError(
-          "User recently changed password! Please log in again.",
+          "You recently changed your password! Please log in again.",
           401
         )
       );
