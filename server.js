@@ -3,67 +3,49 @@ const path = require("path");
 const express = require("express");
 
 require("./utils/env");
-const cors = require('cors')
-const morgan = require("morgan"); 
-const compression = require('compression')
+const morgan = require("morgan");
+const compression = require("compression");
 const rateLimit = require("express-rate-limit");
 
 const dbConnection = require("./config/database");
 const globalErrorHandler = require("./middleware/errorMiddleware");
 const ApiError = require("./utils/apiError");
-const { webhookCheckoutHandler } = require("./services/orderServices")
+const { webhookCheckoutHandler } = require("./services/orderServices");
+const {
+  corsMiddleware,
+  securityHeaders,
+  preflightHandler,
+} = require("./middleware/corsMiddleware");
 
-const mountRoute = require("./routes/index")
+const mountRoute = require("./routes/index");
 
 // create a new express app instance and use express.json middleware to parse request bodies
 const app = express();
-/* -------------------------------- CORS -------------------------------- */
-// ضع في .env مثلا:
-// CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:5173,https://myapp.com
-const allowedOrigins = (process.env.CORS_ORIGINS || "")
-  .split(",")
-  .map(o => o.trim())
-  .filter(Boolean);
 
-app.use(
-  cors({
-    origin: (origin, cb) => {
-      // السماح لطلبات أدوات مثل Postman (بدون origin)
-      if (!origin) return cb(null, true);
-      if (
-        allowedOrigins.length === 0 || 
-        allowedOrigins.includes(origin)
-      ) {
-        return cb(null, true);
-      }
-      return cb(new Error("CORS: Origin not allowed"));
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    exposedHeaders: ["X-Total-Count"],
-    optionsSuccessStatus: 204
-  })
-);
+/* ---------------------------- CORS & Security ---------------------------- */
+// Apply CORS middleware
+app.use(corsMiddleware);
 
-// اختياري: تأكيد رد سريع على أي طلب OPTIONS لم تُغطِّه راوترات مخصّصة
-app.use((req, res, next) => {
-  if (req.method === "OPTIONS") return res.sendStatus(204);
-  next();
-});
-/* ------------------------------ END CORS ------------------------------ */
+// Apply security headers
+app.use(securityHeaders);
+
+// Handle preflight requests
+app.use(preflightHandler);
+/* ------------------------- END CORS & Security --------------------------- */
 
 // compress all responses
 app.use(compression());
 
 // checkout webhook
-app.post('/webhook-checkout', express.raw({ type: 'application/json' }), webhookCheckoutHandler);
+app.post(
+  "/webhook-checkout",
+  express.raw({ type: "application/json" }),
+  webhookCheckoutHandler
+);
 
-
-app.set('query parser', 'extended');
-app.use(express.json({ limit: '40kb' }));
-app.use(express.static(path.join(__dirname, 'uploads')));
-
+app.set("query parser", "extended");
+app.use(express.json({ limit: "40kb" }));
+app.use(express.static(path.join(__dirname, "uploads")));
 
 if (process.env.NODE_ENV === "development") {
   app.use(morgan("dev"));
@@ -75,12 +57,12 @@ if (process.env.NODE_ENV === "development") {
 
 // limit requests from same API
 const limiter = rateLimit({
-	windowMs: 15 * 60 * 1000,
-	limit: 100, 
-  message: "Too many requests from this IP, please try again after 15 minutes"
-})
+  windowMs: 15 * 60 * 1000,
+  limit: 100,
+  message: "Too many requests from this IP, please try again after 15 minutes",
+});
 
-app.use("/api", limiter)
+app.use("/api", limiter);
 
 // mount route
 mountRoute(app);
@@ -95,7 +77,6 @@ app.use(globalErrorHandler);
 
 // --- start server function ---
 const startServer = async () => {
-
   // import database connection
   dbConnection();
 
@@ -116,4 +97,4 @@ const startServer = async () => {
   });
 };
 
-startServer(); 
+startServer();
