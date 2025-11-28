@@ -21,17 +21,20 @@ const categorySchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-const setImageUrl =(doc) => {
+const setImageUrl = (doc) => {
   if (doc.image) {
     const imageUrl = `${process.env.BASE_URL}/categories/${doc.image}`;
     doc.image = imageUrl;
   }
-}
+};
 
-categorySchema.post("init", (doc) => { setImageUrl(doc); });
+categorySchema.post("init", (doc) => {
+  setImageUrl(doc);
+});
 
-categorySchema.post("save", (doc) => { setImageUrl(doc); });
-
+categorySchema.post("save", (doc) => {
+  setImageUrl(doc);
+});
 
 // وهنا بنحول الschema ل model انا مش فاهم ايه الفرق وليه بس برضو كانت فى docs mongoose
 module.exports = mongoose.model("Category", categorySchema);
