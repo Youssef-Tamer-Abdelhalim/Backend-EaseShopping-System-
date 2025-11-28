@@ -22,6 +22,14 @@ const mountRoute = require("./routes/index");
 // create a new express app instance and use express.json middleware to parse request bodies
 const app = express();
 
+// checkout webhook - MUST be before CORS and express.json() middleware
+// Stripe sends raw body and no Origin header
+app.post(
+  "/webhook-checkout",
+  express.raw({ type: "application/json" }),
+  webhookCheckoutHandler
+);
+
 /* ---------------------------- CORS & Security ---------------------------- */
 // Apply CORS middleware
 app.use(corsMiddleware);
@@ -35,13 +43,6 @@ app.use(preflightHandler);
 
 // compress all responses
 app.use(compression());
-
-// checkout webhook
-app.post(
-  "/webhook-checkout",
-  express.raw({ type: "application/json" }),
-  webhookCheckoutHandler
-);
 
 app.set("query parser", "extended");
 app.use(express.json({ limit: "40kb" }));
