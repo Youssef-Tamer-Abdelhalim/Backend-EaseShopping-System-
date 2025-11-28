@@ -15,24 +15,39 @@ const authServices = require("../services/authServices");
 
 router.use(authServices.protect);
 
-router.post("/:cartId", authServices.allowedTo("user"), createOrder);
+// Static routes MUST come before dynamic routes (/:id)
+router.get(
+  "/my-orders",
+  authServices.allowedTo("user"),
+  filterOrderForLoggedUser,
+  getLoggedUserOrders
+);
+
 router.post(
   "/checkout-session/:cartId",
   authServices.allowedTo("user"),
   getCheckoutSession
 );
+router.post("/:cartId", authServices.allowedTo("user"), createOrder);
 
-router.get("/:id", authServices.allowedTo("admin", "manager"), getOrderById);
-
-
-router.patch("/:id/deliver", authServices.allowedTo("admin", "manager"), updateOrderToDelivered);
-router.patch("/:id/pay", authServices.allowedTo("admin", "manager"), updateCashOrderToPaid);
-
+// GET / - Admin/Manager get ALL orders, User gets only their orders
 router.get(
   "/",
-  authServices.allowedTo("user", "admin", "manager"),
-  filterOrderForLoggedUser,
+  authServices.allowedTo("admin", "manager"),
   getLoggedUserOrders
+);
+
+// Dynamic routes with :id MUST come after static routes
+router.get("/:id", authServices.allowedTo("admin", "manager"), getOrderById);
+router.patch(
+  "/:id/deliver",
+  authServices.allowedTo("admin", "manager"),
+  updateOrderToDelivered
+);
+router.patch(
+  "/:id/pay",
+  authServices.allowedTo("admin", "manager"),
+  updateCashOrderToPaid
 );
 
 module.exports = router;

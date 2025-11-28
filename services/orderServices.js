@@ -61,7 +61,7 @@ exports.createOrder = asyncHandler(async (req, res, next) => {
 // @desc    Filter orders for logged user
 // @access  Private
 exports.filterOrderForLoggedUser = asyncHandler(async (req, res, next) => {
-  if (req.user.role === "user") req.filter = { user: req.user._id };
+  if (req.user.role === "user") req.filterOBJ = { user: req.user._id };
   next();
 });
 
@@ -153,8 +153,8 @@ exports.getCheckoutSession = asyncHandler(async (req, res, next) => {
       },
     ],
     mode: "payment",
-    success_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/checkout/cancel`,
+    success_url: `${process.env.FRONTEND_URL || "http://localhost:3000"}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${process.env.FRONTEND_URL || "http://localhost:3000"}/checkout/cancel`,
     customer_email: req.user.email,
     client_reference_id: req.params.cartId,
     metadata,
@@ -166,7 +166,6 @@ exports.getCheckoutSession = asyncHandler(async (req, res, next) => {
     session,
   });
 });
-
 
 const createCardOrder = async (session) => {
   try {
@@ -183,12 +182,13 @@ const createCardOrder = async (session) => {
       postalCode: md.postalCode || "",
       country: {
         code: md["country code"] || md.countryCode || md.country_code || "EG",
-        name: md["country name"] || md.countryName || md.country_name || "Egypt",
+        name:
+          md["country name"] || md.countryName || md.country_name || "Egypt",
       },
     };
 
     const user = await User.findOne({ email: session.customer_email });
-    if (!user) return; 
+    if (!user) return;
 
     const orderPrice = session.amount_total / 100;
 
@@ -199,7 +199,7 @@ const createCardOrder = async (session) => {
       totalOrderPrice: orderPrice,
       paymentMethodType: "online",
       isPaid: true,
-      paidAt: Date.now()
+      paidAt: Date.now(),
     });
 
     if (order) {
