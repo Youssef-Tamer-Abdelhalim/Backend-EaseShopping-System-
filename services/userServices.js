@@ -77,7 +77,10 @@ exports.updateUser = asyncHandler(async (req, res, next) => {
 exports.changeUserPassword = asyncHandler(async (req, res, next) => {
   const document = await User.findByIdAndUpdate(
     req.params.id,
-    { password: await bcrypt.hash(req.body.password, 10), passwordChangedAt: Date.now() },
+    {
+      password: await bcrypt.hash(req.body.password, 10),
+      passwordChangedAt: Date.now(),
+    },
     { new: true }
   );
   if (!document) {
@@ -108,7 +111,10 @@ exports.getLoggedUserData = asyncHandler(async (req, res, next) => {
 exports.updateLoggedUserPassword = asyncHandler(async (req, res, next) => {
   const user = await User.findByIdAndUpdate(
     req.user._id,
-    { password: await bcrypt.hash(req.body.password, 10), passwordChangedAt: Date.now() },
+    {
+      password: await bcrypt.hash(req.body.password, 10),
+      passwordChangedAt: Date.now(),
+    },
     { new: true }
   );
 
@@ -127,15 +133,17 @@ exports.updateLoggedUserPassword = asyncHandler(async (req, res, next) => {
 // @route   PUT /api/v1/users/updateMe
 // @access  Private/protect
 exports.updateLoggedUserData = asyncHandler(async (req, res, next) => {
-  const document = await User.findByIdAndUpdate(
-    req.user._id,
-    {
-      name: req.body.name,
-      email: req.body.email,
-      phone: req.body.phone,
-    },
-    { new: true }
-  );
+  // Build update object with only provided fields
+  const updateData = {};
+  if (req.body.name) updateData.name = req.body.name;
+  if (req.body.slug) updateData.slug = req.body.slug;
+  if (req.body.email) updateData.email = req.body.email;
+  if (req.body.phone) updateData.phone = req.body.phone;
+  if (req.body.profileImg) updateData.profileImg = req.body.profileImg;
+
+  const document = await User.findByIdAndUpdate(req.user._id, updateData, {
+    new: true,
+  });
 
   res.status(200).json({ data: document });
 });

@@ -12,7 +12,7 @@ const {
   getLoggedUserData,
   updateLoggedUserPassword,
   updateLoggedUserData,
-  deleteLoggedUser
+  deleteLoggedUser,
 } = require("../services/userServices");
 
 const {
@@ -22,7 +22,7 @@ const {
   deleteUserValidator,
   changeUserPasswordValidator,
   changeLoggedUserPasswordValidator,
-  updateLoggedUserValidator
+  updateLoggedUserValidator,
 } = require("../utils/validator/userValidator");
 
 const authServices = require("../services/authServices");
@@ -30,8 +30,20 @@ const authServices = require("../services/authServices");
 const router = express.Router();
 
 router.get("/getMe", authServices.protect, getLoggedUserData, getUser);
-router.put("/updateMyPassword", authServices.protect, changeLoggedUserPasswordValidator, updateLoggedUserPassword);
-router.put("/updateMe", authServices.protect, updateLoggedUserValidator, updateLoggedUserData);
+router.put(
+  "/updateMyPassword",
+  authServices.protect,
+  changeLoggedUserPasswordValidator,
+  updateLoggedUserPassword
+);
+router.put(
+  "/updateMe",
+  authServices.protect,
+  uploadUserImage,
+  resizeImage,
+  updateLoggedUserValidator,
+  updateLoggedUserData
+);
 router.delete("/deleteMe", authServices.protect, deleteLoggedUser);
 
 router.use(authServices.protect, authServices.allowedTo("admin"));
