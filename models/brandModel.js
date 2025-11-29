@@ -22,15 +22,17 @@ const brandSchema = new mongoose.Schema(
 );
 
 const setImageUrl = (doc) => {
-  if (doc.image && !doc.image.startsWith('http')) {
+  if (doc.image && !doc.image.startsWith("http")) {
     doc.image = `${process.env.BASE_URL}/brands/${doc.image}`;
   }
 };
 
-brandSchema.post("init", (doc) => { setImageUrl(doc); });
+brandSchema.post("init", (doc) => {
+  setImageUrl(doc);
+});
 
-brandSchema.post("save", (doc) => { setImageUrl(doc); });
-
-
+brandSchema.post("save", (doc) => {
+  setImageUrl(doc);
+});
 
 module.exports = mongoose.model("Brand", brandSchema);

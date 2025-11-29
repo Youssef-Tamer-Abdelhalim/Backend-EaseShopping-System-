@@ -76,10 +76,10 @@ const productSchema = new mongoose.Schema(
       default: 0,
     },
   },
-  { 
+  {
     timestamps: true,
     toJSON: { virtuals: true },
-    toObject: { virtuals: true }
+    toObject: { virtuals: true },
   }
 );
 
@@ -98,13 +98,13 @@ productSchema.pre(/^find/, function (next) {
 });
 
 const setImageUrl = (doc) => {
-  if (doc.imageCover && !doc.imageCover.startsWith('http')) {
+  if (doc.imageCover && !doc.imageCover.startsWith("http")) {
     doc.imageCover = `${process.env.BASE_URL}/products/${doc.imageCover}`;
   }
   if (doc.images && doc.images.length > 0) {
     const imageList = [];
     doc.images.forEach((image) => {
-      if (image && !image.startsWith('http')) {
+      if (image && !image.startsWith("http")) {
         imageList.push(`${process.env.BASE_URL}/products/${image}`);
       } else {
         imageList.push(image);
