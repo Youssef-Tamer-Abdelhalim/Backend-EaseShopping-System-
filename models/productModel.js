@@ -98,15 +98,17 @@ productSchema.pre(/^find/, function (next) {
 });
 
 const setImageUrl = (doc) => {
-  if (doc.imageCover) {
-    const imageUrl = `${process.env.BASE_URL}/products/${doc.imageCover}`;
-    doc.imageCover = imageUrl;
+  if (doc.imageCover && !doc.imageCover.startsWith('http')) {
+    doc.imageCover = `${process.env.BASE_URL}/products/${doc.imageCover}`;
   }
-  if (doc.images) {
+  if (doc.images && doc.images.length > 0) {
     const imageList = [];
     doc.images.forEach((image) => {
-      const imageUrl = `${process.env.BASE_URL}/products/${image}`;
-      imageList.push(imageUrl);
+      if (image && !image.startsWith('http')) {
+        imageList.push(`${process.env.BASE_URL}/products/${image}`);
+      } else {
+        imageList.push(image);
+      }
     });
     doc.images = imageList;
   }

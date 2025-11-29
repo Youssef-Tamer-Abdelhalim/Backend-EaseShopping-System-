@@ -21,12 +21,11 @@ const brandSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-const setImageUrl =(doc) => {
-  if (doc.image) {
-    const imageUrl = `${process.env.BASE_URL}/brands/${doc.image}`;
-    doc.image = imageUrl;
+const setImageUrl = (doc) => {
+  if (doc.image && !doc.image.startsWith('http')) {
+    doc.image = `${process.env.BASE_URL}/brands/${doc.image}`;
   }
-}
+};
 
 brandSchema.post("init", (doc) => { setImageUrl(doc); });
 
