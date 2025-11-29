@@ -25,7 +25,8 @@ exports.resizeImage = asyncHandler(async (req, res, next) => {
       .jpeg({ quality: 90 })
       .toFile(`uploads/users/${filename}`);
 
-    req.body.profileImg = filename;
+    // Save with full path for consistency with other models
+    req.body.profileImg = `users/${filename}`;
   }
 
   next();
