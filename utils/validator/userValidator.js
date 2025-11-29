@@ -4,7 +4,6 @@ const { check, body } = require("express-validator");
 const validatorMiddleWare = require("../../middleware/validatorMiddleWare");
 const User = require("../../models/userModel");
 
-
 // for Admin User only
 exports.createUserValidator = [
   check("name")
@@ -55,7 +54,8 @@ exports.createUserValidator = [
         if (user) {
           return Promise.reject(new Error("Phone number already in use"));
         }
-      })),
+      })
+    ),
 
   check("profileImg").optional(),
 
@@ -81,6 +81,8 @@ exports.updateUserValidator = [
     .withMessage("User ID is required"),
   body("name")
     .optional()
+    .isLength({ min: 3, max: 32 })
+    .withMessage("Name must be between 3 and 32 characters")
     .custom((val, { req }) => {
       req.body.slug = slugify(val);
       return true;
@@ -90,24 +92,33 @@ exports.updateUserValidator = [
     .optional()
     .isEmail()
     .withMessage("Invalid email format")
-    .custom((val) =>
-      User.findOne({ email: val }).then((user) => {
-        if (user) {
-          return Promise.reject(new Error("Email already in use"));
-        }
-      })
-    ),
+    .custom(async (val, { req }) => {
+      // Check if email is used by another user (exclude current user being updated)
+      const user = await User.findOne({
+        email: val,
+        _id: { $ne: req.params.id },
+      });
+      if (user) {
+        return Promise.reject(new Error("Email already in use"));
+      }
+      return true;
+    }),
 
   check("phone")
     .optional()
     .isMobilePhone(["ar-EG", "ar-SA"])
     .withMessage("Invalid phone number format")
-    .custom((val) =>
-      User.findOne({ phone: val }).then((user) => {
-        if (user) {
-          return Promise.reject(new Error("Phone number already in use"));
-        }
-      })),
+    .custom(async (val, { req }) => {
+      // Check if phone is used by another user (exclude current user being updated)
+      const user = await User.findOne({
+        phone: val,
+        _id: { $ne: req.params.id },
+      });
+      if (user) {
+        return Promise.reject(new Error("Phone number already in use"));
+      }
+      return true;
+    }),
 
   check("profileImg").optional(),
 
@@ -162,7 +173,6 @@ exports.deleteUserValidator = [
   validatorMiddleWare,
 ];
 
-
 // for basic user
 exports.changeLoggedUserPasswordValidator = [
   body("currentPassword")
@@ -199,34 +209,46 @@ exports.changeLoggedUserPasswordValidator = [
 exports.updateLoggedUserValidator = [
   body("name")
     .optional()
+    .isLength({ min: 3, max: 32 })
+    .withMessage("Name must be between 3 and 32 characters")
     .custom((val, { req }) => {
       req.body.slug = slugify(val);
       return true;
     }),
 
   check("email")
-    .notEmpty()
-    .withMessage("Email is required")
+    .optional()
     .isEmail()
     .withMessage("Invalid email format")
-    .custom((val) =>
-      User.findOne({ email: val }).then((user) => {
-        if (user) {
-          return Promise.reject(new Error("Email already in use"));
-        }
-      })
-    ),
+    .custom(async (val, { req }) => {
+      // If email is the same as current user's email, skip validation
+      if (val === req.user.email) {
+        return true;
+      }
+      // Check if email is used by another user
+      const user = await User.findOne({ email: val });
+      if (user) {
+        return Promise.reject(new Error("Email already in use"));
+      }
+      return true;
+    }),
 
   check("phone")
     .optional()
     .isMobilePhone(["ar-EG", "ar-SA"])
     .withMessage("Invalid phone number format")
-    .custom((val) =>
-      User.findOne({ phone: val }).then((user) => {
-        if (user) {
-          return Promise.reject(new Error("Phone number already in use"));
-        }
-      })),
+    .custom(async (val, { req }) => {
+      // If phone is the same as current user's phone, skip validation
+      if (val === req.user.phone) {
+        return true;
+      }
+      // Check if phone is used by another user
+      const user = await User.findOne({ phone: val });
+      if (user) {
+        return Promise.reject(new Error("Phone number already in use"));
+      }
+      return true;
+    }),
 
   validatorMiddleWare,
 ];
