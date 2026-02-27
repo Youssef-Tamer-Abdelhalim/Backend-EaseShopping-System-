@@ -7,7 +7,7 @@ const {
   updateBrand,
   deleteBrand,
   uploadBrandImage,
-  resizeImage,
+  handleCloudinaryImages
 } = require("../services/brandServices");
 
 const {
@@ -28,7 +28,7 @@ router
     authServices.protect,
     authServices.allowedTo("manager", "admin"),
     uploadBrandImage,
-    resizeImage,
+    handleCloudinaryImages,
     createBrandValidator,
     createBrand
   );
@@ -40,7 +40,7 @@ router
     authServices.protect,
     authServices.allowedTo("manager", "admin"),
     uploadBrandImage,
-    resizeImage,
+    handleCloudinaryImages,
     updateBrandValidator,
     updateBrand
   )

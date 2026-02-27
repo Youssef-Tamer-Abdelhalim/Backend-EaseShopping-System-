@@ -1,30 +1,15 @@
-const { v4: uuidv4 } = require("uuid");
-const sharp = require("sharp");
-const asyncHandler = require("express-async-handler");
-
 const Brand = require("../models/brandModel");
 const factory = require("./handlersFactroy");
-const {uploadSingleImage} = require("../middleware/uploadImageMiddleware");
+const { uploadMixOfImages, 
+        setCloudinaryUrls
+      } = require("../middleware/uploadImageMiddleware");
 
-//Upload Brand Image
-exports.uploadBrandImage = uploadSingleImage("image");
+const imageFields = [
+  { name: "image", maxCount: 1 },
+];
 
-//Image Processing
-exports.resizeImage = asyncHandler(async (req, res, next) => {
-  const filename = `brand-${uuidv4()}-${Date.now()}.jpeg`;
-
-  await sharp(req.file.buffer)
-    .resize(600, 600, {
-      fit: "inside"
-    })
-    .toFormat("jpeg")
-    .jpeg({ quality: 90 })
-    .toFile(`uploads/brands/${filename}`);
-
-  req.body.image = filename;
-
-  next();
-});
+exports.uploadBrandImage = uploadMixOfImages(imageFields, "brands");
+exports.handleCloudinaryImages = setCloudinaryUrls(imageFields);
 
 // @desc    Get list of brands
 // @route   GET /api/v1/brands

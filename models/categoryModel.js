@@ -16,24 +16,13 @@ const categorySchema = new mongoose.Schema(
       unique: [true, "Slug must be unique"],
       lowercase: true,
     },
-    image: String,
+    image:{
+      type: String,
+      required: [true, "Image for category is required"],
+    },
   },
   { timestamps: true }
 );
-
-const setImageUrl = (doc) => {
-  if (doc.image && !doc.image.startsWith("http")) {
-    doc.image = `${process.env.BASE_URL}/categories/${doc.image}`;
-  }
-};
-
-categorySchema.post("init", (doc) => {
-  setImageUrl(doc);
-});
-
-categorySchema.post("save", (doc) => {
-  setImageUrl(doc);
-});
 
 // وهنا بنحول الschema ل model انا مش فاهم ايه الفرق وليه بس برضو كانت فى docs mongoose
 module.exports = mongoose.model("Category", categorySchema);

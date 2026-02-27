@@ -6,8 +6,8 @@ const {
   getUser,
   updateUser,
   deleteUser,
-  uploadUserImage,
-  resizeImage,
+  uploadUsersImage,
+  handleCloudinaryImages,
   changeUserPassword,
   getLoggedUserData,
   updateLoggedUserPassword,
@@ -39,8 +39,8 @@ router.put(
 router.put(
   "/updateMe",
   authServices.protect,
-  uploadUserImage,
-  resizeImage,
+  uploadUsersImage,
+  handleCloudinaryImages,
   updateLoggedUserValidator,
   updateLoggedUserData
 );
@@ -56,12 +56,12 @@ router.put(
 router
   .route("/")
   .get(getUsers)
-  .post(uploadUserImage, resizeImage, createUserValidator, createUser);
+  .post(uploadUsersImage, handleCloudinaryImages, createUserValidator, createUser);
 
 router
   .route("/:id")
   .get(getUserValidator, getUser)
-  .put(uploadUserImage, resizeImage, updateUserValidator, updateUser)
+  .put(uploadUsersImage, handleCloudinaryImages, updateUserValidator, updateUser)
   .delete(deleteUserValidator, deleteUser);
 
 module.exports = router;

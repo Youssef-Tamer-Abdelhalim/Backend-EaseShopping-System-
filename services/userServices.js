@@ -1,36 +1,18 @@
-const { v4: uuidv4 } = require("uuid");
-const sharp = require("sharp");
 const asyncHandler = require("express-async-handler");
 const bcrypt = require("bcryptjs");
 
 const User = require("../models/userModel");
 const factory = require("./handlersFactroy");
-const { uploadSingleImage } = require("../middleware/uploadImageMiddleware");
+const { uploadMixOfImages, setCloudinaryUrls } = require("../middleware/uploadImageMiddleware");
 const ApiError = require("../utils/apiError");
 const generateToken = require("../utils/generateToken");
 
-//Upload User Image
-exports.uploadUserImage = uploadSingleImage("profileImg");
+const imageFields = [
+  { name: "profileImg", maxCount: 1 }
+];
 
-//Image Processing
-exports.resizeImage = asyncHandler(async (req, res, next) => {
-  const filename = `user-${uuidv4()}-${Date.now()}.jpeg`;
-
-  if (req.file) {
-    await sharp(req.file.buffer)
-      .resize(600, 600, {
-        fit: "inside",
-      })
-      .toFormat("jpeg")
-      .jpeg({ quality: 90 })
-      .toFile(`uploads/users/${filename}`);
-
-    // Save with full path for consistency with other models
-    req.body.profileImg = `users/${filename}`;
-  }
-
-  next();
-});
+exports.uploadUsersImage = uploadMixOfImages(imageFields, "users");
+exports.handleCloudinaryImages = setCloudinaryUrls(imageFields);
 
 // @desc    Get list of users
 // @route   GET /api/v1/users

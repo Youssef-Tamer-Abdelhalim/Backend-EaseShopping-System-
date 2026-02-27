@@ -16,23 +16,12 @@ const brandSchema = new mongoose.Schema(
       unique: [true, "Slug must be unique"],
       lowercase: true,
     },
-    image: String,
+    image:{
+      type: String,
+      required: [true, "Image for category is required"],
+    },
   },
   { timestamps: true }
 );
-
-const setImageUrl = (doc) => {
-  if (doc.image && !doc.image.startsWith("http")) {
-    doc.image = `${process.env.BASE_URL}/brands/${doc.image}`;
-  }
-};
-
-brandSchema.post("init", (doc) => {
-  setImageUrl(doc);
-});
-
-brandSchema.post("save", (doc) => {
-  setImageUrl(doc);
-});
 
 module.exports = mongoose.model("Brand", brandSchema);

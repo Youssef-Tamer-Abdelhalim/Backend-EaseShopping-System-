@@ -1,33 +1,15 @@
-const { v4: uuidv4 } = require("uuid");
-const sharp = require("sharp");
-const asyncHandler = require("express-async-handler");
-
 const factory = require("./handlersFactroy");
 const Category = require("../models/categoryModel");
-const {uploadSingleImage} = require("../middleware/uploadImageMiddleware");
+const { uploadMixOfImages, 
+        setCloudinaryUrls
+      } = require("../middleware/uploadImageMiddleware");
 
+const imageFields = [
+  { name: "image", maxCount: 1 },
+];
 
-//Upload Category Image
-exports.uploadCategoryImage = uploadSingleImage("image");
-
-//Image Processing
-exports.resizeImage = asyncHandler(async (req, res, next) => {
-  const filename = `category-${uuidv4()}-${Date.now()}.jpeg`;
-
-  if (req.file) {
-    await sharp(req.file.buffer)
-    .resize(600, 600, {
-      fit: "inside"
-    })
-    .toFormat("jpeg")
-    .jpeg({ quality: 90 })
-    .toFile(`uploads/categories/${filename}`);
-  }
-
-  req.body.image = filename;
-
-  next();
-});
+exports.uploadCategoryImage = uploadMixOfImages(imageFields, "categories");
+exports.handleCloudinaryImages = setCloudinaryUrls(imageFields);     
 
 // @desc    Get list of categories
 // @route   GET /api/v1/categories

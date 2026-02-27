@@ -1,30 +1,16 @@
-const asyncHandler = require("express-async-handler");
 const Product = require("../models/productModel");
 const factory = require("./handlersFactroy");
-const { uploadMixOfImages } = require("../middleware/uploadImageMiddleware");
+const { uploadMixOfImages, 
+        setCloudinaryUrls 
+      } = require("../middleware/uploadImageMiddleware");
 
-exports.uploadProductsImage = uploadMixOfImages(
-  [
-    { name: "imageCover", maxCount: 1 },
-    { name: "images", maxCount: 2 },
-  ],
-  "products"
-);
+const imageFields = [
+  { name: "imageCover", maxCount: 1 },
+  { name: "images", maxCount: 5 },
+];
 
-exports.handleCloudinaryImages = asyncHandler(async (req, res, next) => {
-
-  if (req.files && req.files.imageCover) {
-    req.body.imageCover = req.files.imageCover[0].path;
-  }
-
-  if (req.files && req.files.images) {
-    req.body.images = req.files.images.map((img) => img.path);
-  } else {
-    req.body.images = []; 
-  }
-  
-  next();
-});
+exports.uploadProductsImage = uploadMixOfImages(imageFields, "products");
+exports.handleCloudinaryImages = setCloudinaryUrls(imageFields);
 
 // @desc    Get list of products
 // @route   GET /api/v1/products
