@@ -5,7 +5,6 @@ const express = require("express");
 require("./utils/env");
 const morgan = require("morgan");
 const compression = require("compression");
-const rateLimit = require("express-rate-limit");
 
 const dbConnection = require("./config/database");
 const globalErrorHandler = require("./middleware/errorMiddleware");
@@ -55,15 +54,6 @@ if (process.env.NODE_ENV === "development") {
   app.use(morgan("combined"));
   console.log(`mode: ${process.env.NODE_ENV}`);
 }
-
-// limit requests from same API
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 100,
-  message: "Too many requests from this IP, please try again after 15 minutes",
-});
-
-app.use("/api", limiter);
 
 // mount route
 mountRoute(app);

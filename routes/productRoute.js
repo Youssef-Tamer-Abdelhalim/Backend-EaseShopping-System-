@@ -1,4 +1,4 @@
-const express = require("express"); //هنا عملنا require لى express عشان يشتغل
+const express = require("express"); 
 
 const {
   getProducts,
@@ -7,7 +7,7 @@ const {
   updateProduct,
   deleteProduct,
   uploadProductsImage,
-  resizeProductsImage,
+  handleCloudinaryImages,
 } = require("../services/productServices");
 
 const {
@@ -32,7 +32,7 @@ router
     authServices.protect,
     authServices.allowedTo("manager", "admin"),
     uploadProductsImage,
-    resizeProductsImage,
+    handleCloudinaryImages,
     createProductValidator,
     createProduct
   );
@@ -44,7 +44,7 @@ router
     authServices.protect,
     authServices.allowedTo("manager", "admin"),
     uploadProductsImage,
-    resizeProductsImage,
+    handleCloudinaryImages,
     updateProductValidator,
     updateProduct
   )

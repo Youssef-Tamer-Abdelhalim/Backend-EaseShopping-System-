@@ -39,10 +39,7 @@ const productSchema = new mongoose.Schema(
     priceAfterDiscount: {
       type: Number,
       min: [0, "Price After Discount must be a positive number"],
-      max: [
-        100000000000000,
-        "Price After Discount must not exceed 100000000000000 ",
-      ],
+      max: [100000000000000, "Price After Discount must not exceed 100000000000000 "],
     },
     colors: [String],
     imageCover: {
@@ -89,37 +86,11 @@ productSchema.virtual("reviews", {
   localField: "_id",
 });
 
-// Mongoose query middleware
 productSchema.pre(/^find/, function (next) {
   this.populate({ path: "category", select: "name -_id" });
   this.populate({ path: "subCategory", select: "name -_id" });
   this.populate({ path: "brand", select: "name -_id" });
   next();
-});
-
-const setImageUrl = (doc) => {
-  if (doc.imageCover && !doc.imageCover.startsWith("http")) {
-    doc.imageCover = `${process.env.BASE_URL}/products/${doc.imageCover}`;
-  }
-  if (doc.images && doc.images.length > 0) {
-    const imageList = [];
-    doc.images.forEach((image) => {
-      if (image && !image.startsWith("http")) {
-        imageList.push(`${process.env.BASE_URL}/products/${image}`);
-      } else {
-        imageList.push(image);
-      }
-    });
-    doc.images = imageList;
-  }
-};
-
-productSchema.post("init", (doc) => {
-  setImageUrl(doc);
-});
-
-productSchema.post("save", (doc) => {
-  setImageUrl(doc);
 });
 
 module.exports = mongoose.model("Product", productSchema);
