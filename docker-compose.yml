@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  # 1. قاعدة بيانات MongoDB
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb_container
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db # لضمان عدم ضياع البيانات عند إغلاق الحاوية
+    networks:
+      - shopping-network
+
+  # 2. تطبيق الباك اند (Node.js)
+  api:
+    build: .
+    container_name: node_api_container
+    restart: always
+    environment:
+      - NODE_ENV=production
+      - DB_URL=mongodb://mongodb:27017/ease-shopping # الربط باسم الحاوية بدلاً من localhost
+    depends_on:
+      - mongodb
+    networks:
+      - shopping-network
+
+  # 3. خادم Nginx (الذي صممنا ملف إعداده سابقاً)
+  nginx:
+    image: nginx:alpine
+    container_name: nginx_proxy
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - api
+    networks:
+      - shopping-network
+
+networks:
+  shopping-network:
+    driver: bridge
+
+volumes:
+  mongo-data:
