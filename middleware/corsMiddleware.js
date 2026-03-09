@@ -44,23 +44,6 @@ const corsOptions = {
   optionsSuccessStatus: 204,
 };
 
-// Security headers middleware
-const securityHeaders = (req, res, next) => {
-  // Prevent clickjacking attacks
-  res.setHeader("X-Frame-Options", "SAMEORIGIN");
-
-  // Prevent MIME type sniffing
-  res.setHeader("X-Content-Type-Options", "nosniff");
-
-  // Enable XSS protection in older browsers
-  res.setHeader("X-XSS-Protection", "1; mode=block");
-
-  // Referrer policy for privacy
-  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
-
-  next();
-};
-
 // Preflight handler
 const preflightHandler = (req, res, next) => {
   if (req.method === "OPTIONS") {
@@ -71,6 +54,5 @@ const preflightHandler = (req, res, next) => {
 
 module.exports = {
   corsMiddleware: cors(corsOptions),
-  securityHeaders,
   preflightHandler,
 };

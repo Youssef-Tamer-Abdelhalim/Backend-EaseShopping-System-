@@ -5,16 +5,16 @@ const express = require("express");
 require("./utils/env");
 const morgan = require("morgan");
 const compression = require("compression");
+const helmet = require("helmet");
+const mongoSanitize = require("express-mongo-sanitize");
+const xss = require("xss-clean");
 
 const dbConnection = require("./config/database");
 const globalErrorHandler = require("./middleware/errorMiddleware");
 const ApiError = require("./utils/apiError");
 const { webhookCheckoutHandler } = require("./services/orderServices");
-const {
-  corsMiddleware,
-  securityHeaders,
-  preflightHandler,
-} = require("./middleware/corsMiddleware");
+const { corsMiddleware, preflightHandler } = require("./middleware/corsMiddleware");
+const { globalLimiter } = require("./middleware/rateLimitMiddleware");
 
 const mountRoute = require("./routes/index");
 
@@ -30,11 +30,16 @@ app.post(
 );
 
 /* ---------------------------- CORS & Security ---------------------------- */
+// Security headers (helmet must come before CORS)
+app.use(
+  helmet({
+    // Allow cross-origin requests so frontend can consume the API
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  })
+);
+
 // Apply CORS middleware
 app.use(corsMiddleware);
-
-// Apply security headers
-app.use(securityHeaders);
 
 // Handle preflight requests
 app.use(preflightHandler);
@@ -46,6 +51,15 @@ app.use(compression());
 app.set("query parser", "extended");
 app.use(express.json({ limit: "40kb" }));
 app.use(express.static(path.join(__dirname, "uploads")));
+
+// NoSQL injection protection — strip $ and . from req.body/params/query
+app.use(mongoSanitize());
+
+// XSS protection — sanitize user input to prevent script injection
+app.use(xss());
+
+// Rate limiting — 100 requests per 15 minutes per IP
+app.use("/api", globalLimiter);
 
 if (process.env.NODE_ENV === "development") {
   app.use(morgan("dev"));
