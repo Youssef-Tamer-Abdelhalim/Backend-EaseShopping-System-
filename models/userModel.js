@@ -32,6 +32,12 @@ const userSchema = new mongoose.Schema(
     passwordResetCode: String,
     passwordResetExpires: Date,
     passwordResetVerified: Boolean,
+    // Refresh token (hashed) — cleared on logout
+    refreshToken: String,
+    // Email verification — no default so existing users (undefined) bypass the check
+    emailVerified: Boolean,
+    emailVerificationCode: String,
+    emailVerificationExpires: Date,
     role: {
       type: String,
       enum: ["user", "manager", "admin"],

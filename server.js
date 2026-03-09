@@ -8,6 +8,7 @@ const compression = require("compression");
 const helmet = require("helmet");
 const mongoSanitize = require("express-mongo-sanitize");
 const xss = require("xss-clean");
+const cookieParser = require("cookie-parser");
 
 const dbConnection = require("./config/database");
 const globalErrorHandler = require("./middleware/errorMiddleware");
@@ -50,6 +51,7 @@ app.use(compression());
 
 app.set("query parser", "extended");
 app.use(express.json({ limit: "40kb" }));
+app.use(cookieParser());
 app.use(express.static(path.join(__dirname, "uploads")));
 
 // NoSQL injection protection — strip $ and . from req.body/params/query

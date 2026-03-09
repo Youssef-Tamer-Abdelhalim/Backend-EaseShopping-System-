@@ -7,9 +7,66 @@ const bcrypt = require("bcryptjs");
 const User = require("../models/userModel");
 const ApiError = require("../utils/apiError");
 const sendEmail = require("../utils/sendEmail");
-const generateToken = require("../utils/generateToken");
+const { generateAccessToken, generateRefreshToken, hashToken } = require("../utils/generateToken");
+const { verificationEmailTemplate, passwordResetEmailTemplate } = require("../utils/emailTemplates");
 
-// @desc    User signup
+// ─── Private Helpers ──────────────────────────────────────────────────────────
+
+/**
+ * Generates a random numeric code, returns both the plaintext and its SHA-256 hash.
+ * @param {number} digits - number of digits (default 6)
+ */
+const createHashedCode = (digits = 6) => {
+  const code = Math.floor(
+    10 ** (digits - 1) + Math.random() * (9 * 10 ** (digits - 1))
+  ).toString();
+  const hashed = crypto.createHash("sha256").update(code).digest("hex");
+  return { code, hashed };
+};
+
+/**
+ * Issues an access + refresh token pair for a user.
+ * Saves the hashed refresh token to the DB and sets it as an HttpOnly cookie.
+ * Returns the plaintext access token.
+ */
+const issueTokenPair = async (user, res) => {
+  const accessToken = generateAccessToken(user._id, user.role);
+  const refreshToken = generateRefreshToken(user._id);
+
+  user.refreshToken = hashToken(refreshToken);
+  await user.save({ validateBeforeSave: false });
+
+  res.cookie("refreshToken", refreshToken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+  });
+
+  return accessToken;
+};
+
+/**
+ * Generates a 6-digit verification code, saves its hash to the user,
+ * and sends the verification email.
+ */
+const dispatchVerificationEmail = async (user) => {
+  const { code, hashed } = createHashedCode(6);
+
+  user.emailVerificationCode = hashed;
+  user.emailVerificationExpires = Date.now() + 15 * 60 * 1000;
+  await user.save({ validateBeforeSave: false });
+
+  await sendEmail({
+    to: user.email,
+    subject: "Verify Your Email Address",
+    html: verificationEmailTemplate({ name: user.name, code }),
+  });
+};
+
+// ─── Signup & Email Verification ─────────────────────────────────────────────
+
+// @desc    Create new account and send verification email
 // @route   POST /api/v1/auth/signup
 // @access  Public
 exports.signUp = asyncHandler(async (req, res, next) => {
@@ -17,301 +74,258 @@ exports.signUp = asyncHandler(async (req, res, next) => {
     name: req.body.name,
     email: req.body.email,
     password: req.body.password,
+    emailVerified: false,
   });
 
-  const token = generateToken(user._id);
-
-  // لا نرسل الباسورد في الـ response
-  user.password = undefined;
-
-  res.status(201).json({
-    status: "success signup",
-    data: {
-      user,
-      token,
-    },
-  });
-});
-
-// @desc    User logIn
-// @route   POST /api/v1/auth/logIn
-// @access  Public
-exports.logIn = asyncHandler(async (req, res, next) => {
-  // Check if user exists
-  const user = await User.findOne({ email: req.body.email });
-  if (!user || !(await bcrypt.compare(req.body.password, user.password))) {
-    return next(new ApiError("Invalid Email or Password", 401));
-  }
-
-  const token = generateToken(user._id);
-
-  // لا نرسل الباسورد في الـ response
-  user.password = undefined;
-
-  res.status(200).json({
-    status: "success login",
-    data: {
-      user,
-      token,
-    },
-  });
-});
-
-// @desc   make sure the user is logged in
-exports.protect = asyncHandler(async (req, res, next) => {
-  // 1) Check if token exists, if exists get
-  let token;
-  if (
-    req.headers.authorization &&
-    req.headers.authorization.startsWith("Bearer")
-  ) {
-    token = req.headers.authorization.split(" ")[1];
-  }
-  if (!token) {
+  try {
+    await dispatchVerificationEmail(user);
+  } catch {
+    user.emailVerificationCode = undefined;
+    user.emailVerificationExpires = undefined;
+    await user.save({ validateBeforeSave: false });
     return next(
       new ApiError(
-        "You are not logged in Please log in to access this route",
-        401
+        "Account created but verification email failed. Please request a new code.",
+        500
       )
     );
   }
 
-  // 2) Verify token (no changes happened or expired)
+  res.status(201).json({
+    status: "success",
+    message: "Account created. Please check your email to verify your account.",
+    data: { user: { _id: user._id, name: user.name, email: user.email } },
+  });
+});
+
+// @desc    Verify email with the 6-digit code
+// @route   POST /api/v1/auth/verifyemail
+// @access  Public
+exports.verifyEmail = asyncHandler(async (req, res, next) => {
+  const hashed = crypto
+    .createHash("sha256")
+    .update(req.body.verificationCode)
+    .digest("hex");
+
+  const user = await User.findOne({
+    emailVerificationCode: hashed,
+    emailVerificationExpires: { $gt: Date.now() },
+  });
+
+  if (!user) return next(new ApiError("Invalid or expired verification code.", 400));
+
+  user.emailVerified = true;
+  user.emailVerificationCode = undefined;
+  user.emailVerificationExpires = undefined;
+
+  const accessToken = await issueTokenPair(user, res);
+
+  res.status(200).json({
+    status: "success",
+    message: "Email verified successfully.",
+    data: { user, accessToken },
+  });
+});
+
+// @desc    Resend email verification code
+// @route   POST /api/v1/auth/resendverification
+// @access  Public
+exports.resendVerificationEmail = asyncHandler(async (req, res, next) => {
+  const user = await User.findOne({ email: req.body.email });
+
+  if (!user)
+    return next(new ApiError(`No account found with email ${req.body.email}.`, 404));
+
+  if (user.emailVerified)
+    return next(new ApiError("This email is already verified.", 400));
+
+  try {
+    await dispatchVerificationEmail(user);
+  } catch {
+    return next(new ApiError("Failed to send verification email. Try again later.", 500));
+  }
+
+  res.status(200).json({
+    status: "success",
+    message: "Verification code sent to your email.",
+  });
+});
+
+// ─── Login / Logout / Token Refresh ──────────────────────────────────────────
+
+// @desc    Login and receive access + refresh tokens
+// @route   POST /api/v1/auth/login
+// @access  Public
+exports.logIn = asyncHandler(async (req, res, next) => {
+  const user = await User.findOne({ email: req.body.email });
+
+  if (!user || !(await bcrypt.compare(req.body.password, user.password)))
+    return next(new ApiError("Invalid email or password.", 401));
+
+  if (user.emailVerified === false)
+    return next(
+      new ApiError(
+        "Please verify your email before logging in. Check your inbox or request a new code.",
+        403
+      )
+    );
+
+  const accessToken = await issueTokenPair(user, res);
+
+  // لا نرسل الباسورد في الـ response
+  user.password = undefined;
+
+  res.status(200).json({ status: "success", data: { user, accessToken } });
+});
+
+// @desc    Issue a new access token using the refresh token cookie
+// @route   POST /api/v1/auth/refresh
+// @access  Public
+exports.refreshAccessToken = asyncHandler(async (req, res, next) => {
+  const token = req.cookies && req.cookies.refreshToken;
+  if (!token) return next(new ApiError("No refresh token provided.", 401));
+
+  let decoded;
+  try {
+    decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET_KEY);
+  } catch {
+    return next(new ApiError("Invalid or expired refresh token. Please log in again.", 401));
+  }
+
+  const user = await User.findById(decoded.userId);
+  if (!user || user.refreshToken !== hashToken(token))
+    return next(new ApiError("Session expired. Please log in again.", 401));
+
+  const accessToken = generateAccessToken(user._id, user.role);
+  res.status(200).json({ status: "success", accessToken });
+});
+
+// @desc    Logout and invalidate refresh token
+// @route   POST /api/v1/auth/logout
+// @access  Private
+exports.logout = asyncHandler(async (req, res) => {
+  req.user.refreshToken = undefined;
+  await req.user.save({ validateBeforeSave: false });
+  res.clearCookie("refreshToken");
+  res.status(200).json({ status: "success", message: "Logged out successfully." });
+});
+
+// ─── Guard Middleware ─────────────────────────────────────────────────────────
+
+// @desc    Protect route — verify access token and attach user to req
+exports.protect = asyncHandler(async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer"))
+    return next(new ApiError("You are not logged in. Please log in to access this route.", 401));
+
+  const token = authHeader.split(" ")[1];
   const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
 
-  // 3) Check if user exists
   const currentUser = await User.findById(decoded.userId);
-  if (!currentUser) {
-    return next(
-      new ApiError("The user belonging to this token does no longer exist", 401)
-    );
+  if (!currentUser)
+    return next(new ApiError("The account belonging to this token no longer exists.", 401));
+
+  if (currentUser.passwordChangedAt) {
+    const changedAt = parseInt(currentUser.passwordChangedAt.getTime() / 1000, 10);
+    if (decoded.iat < changedAt)
+      return next(new ApiError("Password was recently changed. Please log in again.", 401));
   }
 
-  // 4) Check if user change his password after token created
-  if (currentUser.passwordChangedAt) {
-    const changedTimestamp = parseInt(
-      currentUser.passwordChangedAt.getTime() / 1000,
-      10
-    );
-    if (decoded.iat < changedTimestamp) {
-      return next(
-        new ApiError(
-          "You recently changed your password! Please log in again.",
-          401
-        )
-      );
-    }
-  }
+  if (currentUser.emailVerified === false)
+    return next(new ApiError("Please verify your email address to access this route.", 403));
 
   req.user = currentUser;
   next();
 });
 
-// @desc   Authorize by ( User Permissions )
+// @desc    Restrict route to specific roles
 exports.allowedTo = (...roles) =>
   asyncHandler(async (req, res, next) => {
-    // 1) access roles
-    // 2) access registered user (req.user.role)
-    if (!roles.includes(req.user.role)) {
-      return next(
-        new ApiError("You are not authorized to access this route", 403)
-      );
-    }
+    if (!roles.includes(req.user.role))
+      return next(new ApiError("You are not authorized to access this route.", 403));
     next();
   });
 
-// @desc   Forget Password
-// @route  POST /api/v1/auth/forgetPassword
-// @access Public
-exports.forgetPassword = asyncHandler(async (req, res, next) => {
-  // 1) Get User by email
-  const user = await User.findOne({ email: req.body.email });
-  if (!user) {
-    return next(
-      new ApiError(`There is no user with this email ${req.body.email}`, 404)
-    );
-  }
+// ─── Password Reset ───────────────────────────────────────────────────────────
 
-  // 2) If User exists, Generate 8 digits random number (reset code), hashed the reset code and save it in DB
-  const resetCode = Math.floor(10000000 + Math.random() * 90000000).toString();
-  const hashedResetCode = crypto
-    .createHash("sha256")
-    .update(resetCode)
-    .digest("hex");
-  user.passwordResetCode = hashedResetCode;
-  user.passwordResetExpires = Date.now() + 1 * 60 * 1000;
+// @desc    Send password reset code to email
+// @route   POST /api/v1/auth/forgetpassword
+// @access  Public
+exports.forgetPassword = asyncHandler(async (req, res, next) => {
+  const user = await User.findOne({ email: req.body.email });
+  if (!user)
+    return next(new ApiError(`No account found with email ${req.body.email}.`, 404));
+
+  const { code, hashed } = createHashedCode(8);
+  user.passwordResetCode = hashed;
+  user.passwordResetExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
   user.passwordResetVerified = false;
 
-  await user.save();
-  // 3) Send Email to user with the code
-
-  const htmlMessage = `<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <title>Ease Shopping | Password Reset Code</title>
-  </head>
-  <body style="margin:0; padding:0; background:#f3f5f7; font-family:Arial, Helvetica, sans-serif;">
-
-    <!-- Wrapper -->
-    <table width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f3f5f7">
-      <tr>
-        <td align="center" style="padding:24px;">
-
-          <!-- Container -->
-          <table width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px; width:100%; background:#ffffff; border-radius:12px; box-shadow:0 2px 10px rgba(0,0,0,0.05);">
-            
-            <!-- Header -->
-            <tr>
-              <td align="center" style="padding:24px;">
-                <img src="https://via.placeholder.com/120x40?text=Ease+Shopping" width="120" height="40" alt="Ease Shopping" style="display:block; border:0;" />
-              </td>
-            </tr>
-
-            <!-- Body -->
-            <tr>
-              <td style="padding:24px; text-align:left; color:#0f172a;">
-                <h2 style="margin:0 0 12px; font-size:22px;">Password Reset</h2>
-                <p style="margin:0 0 20px; font-size:14px; color:#475569;">
-                  Hi ${user.name}, here is your password reset confirmation code for your <strong>Ease Shopping</strong> account.
-                </p>
-
-                <!-- Code -->
-                <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:16px 0;">
-                  <tr>
-                    <td align="center" style="background:#0b1220; border-radius:10px; padding:14px 16px;">
-                      <span style="display:inline-block; font-size:28px; font-family:monospace; letter-spacing:6px; color:#ffffff;">${resetCode}</span>
-                    </td>
-                  </tr>
-                </table>
-
-                <!-- Validity -->
-                <p style="margin:0 0 20px; font-size:14px; color:#334155;">
-                  This code is valid for <strong>1 minute</strong> from the time you received this email.
-                </p>
-
-                <!-- Security note -->
-                <p style="margin:8px 0 0; font-size:12px; color:#94a3b8;">
-                  Do not share this code with anyone. The Ease Shopping support team will never ask you for this code by email or phone.
-                </p>
-
-                <!-- Divider -->
-                <hr style="border:none; border-top:1px solid #e5e7eb; margin:20px 0;" />
-
-                <!-- Footer -->
-                <p style="margin:0 0 6px; font-size:12px; color:#94a3b8; text-align:center;">
-                  Best regards, <strong>Ease Shopping Team</strong>
-                </p>
-                <p style="margin:0; font-size:11px; color:#94a3b8; text-align:center;">
-                  If you did not request this action, you can safely ignore this email.
-                </p>
-              </td>
-            </tr>
-
-            <!-- Legal Footer -->
-            <tr>
-              <td align="center" style="padding:16px; font-size:11px; color:#94a3b8;">
-                © 2025 Ease Shopping. All rights reserved.
-              </td>
-            </tr>
-
-          </table>
-          <!-- End Container -->
-
-        </td>
-      </tr>
-    </table>
-
-  </body>
-</html>`;
-
   try {
+    await user.save({ validateBeforeSave: false });
     await sendEmail({
       to: user.email,
       subject: "Password Reset Code",
-      html: htmlMessage,
+      html: passwordResetEmailTemplate({ name: user.name, code }),
     });
-  } catch (err) {
+  } catch {
     user.passwordResetCode = undefined;
     user.passwordResetExpires = undefined;
     user.passwordResetVerified = undefined;
-
-    await user.save();
-    return next(
-      new ApiError("There is an error in sending email, Try again later", 500)
-    );
+    await user.save({ validateBeforeSave: false });
+    return next(new ApiError("Failed to send reset email. Try again later.", 500));
   }
 
-  res.status(200).json({
-    status: "success",
-    message: "Password reset code sent to email!",
-  });
+  res.status(200).json({ status: "success", message: "Password reset code sent to your email." });
 });
 
-// @desc Verify password reset code
-// @route POST /api/v1/auth/verifyresetcode
-// @access Public
+// @desc    Verify the 8-digit password reset code
+// @route   POST /api/v1/auth/verifyresetcode
+// @access  Public
 exports.verifyPasswordResetCode = asyncHandler(async (req, res, next) => {
-  // 1) get user based on ( passwordResetCode )
-  const hashedResetCode = crypto
+  const hashed = crypto
     .createHash("sha256")
     .update(req.body.resetCode)
     .digest("hex");
 
   const user = await User.findOne({
-    passwordResetCode: hashedResetCode,
+    passwordResetCode: hashed,
     passwordResetExpires: { $gt: Date.now() },
   });
 
-  if (!user) {
-    return next(new ApiError("Invalid or expired reset code", 400));
-  }
+  if (!user) return next(new ApiError("Invalid or expired reset code.", 400));
 
-  // 2) reset code valid
   user.passwordResetVerified = true;
-  await user.save();
+  await user.save({ validateBeforeSave: false });
 
-  res.status(200).json({
-    status: "success",
-    message: "Password reset successful!",
-  });
+  res.status(200).json({ status: "success", message: "Reset code verified." });
 });
 
-// @desc Reset password
-// @route POST /api/v1/auth/resetPassword
-// @access Public
+// @desc    Set new password after reset code is verified
+// @route   PUT /api/v1/auth/resetpassword
+// @access  Public
 exports.resetPassword = asyncHandler(async (req, res, next) => {
-  // 1) get user based on email
   const user = await User.findOne({ email: req.body.email });
-  if (!user) {
-    return next(
-      new ApiError(`There is no user with this email ${req.body.email}`, 404)
-    );
-  }
+  if (!user)
+    return next(new ApiError(`No account found with email ${req.body.email}.`, 404));
 
-  // 2) if reset code verified (passwordResetVerified = true)
-  if (!user.passwordResetVerified) {
-    return next(new ApiError("reset code not verified ", 400));
-  }
+  if (!user.passwordResetVerified)
+    return next(new ApiError("Reset code has not been verified.", 400));
 
-  // 3) if new password and confirm password match
-  if (req.body.newPassword !== req.body.confirmPassword) {
-    return next(new ApiError("Passwords do not match", 400));
-  }
+  if (req.body.newPassword !== req.body.confirmPassword)
+    return next(new ApiError("Passwords do not match.", 400));
 
-  // 4) update user password and reset fields and save it in DB
   user.password = req.body.newPassword;
   user.passwordResetCode = undefined;
   user.passwordResetExpires = undefined;
   user.passwordResetVerified = undefined;
-  await user.save();
+  await user.save(); // triggers bcrypt pre-save hook
 
-  // 5)Generate a new token For user with new password
-  const token = generateToken(user._id);
+  const accessToken = await issueTokenPair(user, res);
 
   res.status(200).json({
     status: "success",
-    message: "Password reset successful!",
-    token,
+    message: "Password reset successful.",
+    accessToken,
   });
 });

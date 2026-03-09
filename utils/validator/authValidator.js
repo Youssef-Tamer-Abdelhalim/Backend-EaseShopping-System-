@@ -104,3 +104,25 @@ exports.resetPasswordValidator = [
 
   validatorMiddleWare,
 ];
+
+exports.verifyEmailValidator = [
+  check("verificationCode")
+    .notEmpty()
+    .withMessage("Verification code is required")
+    .isLength({ min: 6, max: 6 })
+    .withMessage("Verification code must be 6 digits")
+    .isNumeric()
+    .withMessage("Verification code must contain digits only"),
+
+  validatorMiddleWare,
+];
+
+exports.resendVerificationValidator = [
+  check("email")
+    .notEmpty()
+    .withMessage("Email is required")
+    .isEmail()
+    .withMessage("Invalid email format"),
+
+  validatorMiddleWare,
+];
