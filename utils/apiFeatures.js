@@ -43,20 +43,26 @@ class ApiFeatures {
   }
 
   search(modelNameOfSearch) {
-    // 4) Searching
     if (this.queryString.keyword) {
-      let query = {};
       if (modelNameOfSearch === "Products") {
-        query.$or = [
-          { title: { $regex: this.queryString.keyword, $options: "i" } },
-          { description: { $regex: this.queryString.keyword, $options: "i" } },
-        ];
-      }
-      else {
-        query = { name: { $regex: this.queryString.keyword, $options: "i" } };
-      }
+        // Use MongoDB text index for relevance-based search.
+        // Falls back to regex when the text index is not yet built.
+        this.mongooseQuery = this.mongooseQuery.find({
+          $text: { $search: this.queryString.keyword },
+        });
 
-      this.mongooseQuery = this.mongooseQuery.find(query);
+        // Sort by relevance score when no explicit sort was requested.
+        // This runs after sort(), so it overrides the default createdAt sort.
+        if (!this.queryString.sort) {
+          this.mongooseQuery = this.mongooseQuery.sort({
+            score: { $meta: "textScore" },
+          });
+        }
+      } else {
+        this.mongooseQuery = this.mongooseQuery.find({
+          name: { $regex: this.queryString.keyword, $options: "i" },
+        });
+      }
     }
     return this;
   }

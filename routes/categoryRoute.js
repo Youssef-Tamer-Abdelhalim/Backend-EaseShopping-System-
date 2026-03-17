@@ -18,6 +18,7 @@ const {
 } = require("../utils/validator/categoryValidator");
 
 const authServices = require("../services/authServices");
+const { cacheResponse, clearCache } = require("../middleware/cacheMiddleware");
 
 const router = express.Router();
 
@@ -25,10 +26,11 @@ const subCategoryRoutes = require("./subCategoryRoute");
 
 router
   .route("/")
-  .get(getCategories)
+  .get(cacheResponse, getCategories)
   .post(
     authServices.protect,
     authServices.allowedTo("manager", "admin"),
+    clearCache("/api/v1/categories"),
     uploadCategoryImage,
     handleCloudinaryImages,
     createCategoryValidator,
@@ -39,16 +41,22 @@ router.use("/:categoryId/subcategories", subCategoryRoutes);
 
 router
   .route("/:id")
-  .get(getCategoryValidator, getCategory)
+  .get(cacheResponse, getCategoryValidator, getCategory)
   .put(
     authServices.protect,
     authServices.allowedTo("manager", "admin"),
+    clearCache("/api/v1/categories"),
     uploadCategoryImage,
     handleCloudinaryImages,
     updateCategoryValidator,
     updateCategory
   )
-  .delete(authServices.protect,
-    authServices.allowedTo("admin"),deleteCategoryValidator, deleteCategory);
+  .delete(
+    authServices.protect,
+    authServices.allowedTo("admin"),
+    clearCache("/api/v1/categories"),
+    deleteCategoryValidator,
+    deleteCategory
+  );
 
 module.exports = router;

@@ -18,15 +18,17 @@ const {
 } = require("../utils/validator/brandValidator");
 
 const authServices = require("../services/authServices");
+const { cacheResponse, clearCache } = require("../middleware/cacheMiddleware");
 
 const router = express.Router();
 
 router
   .route("/")
-  .get(getBrands)
+  .get(cacheResponse, getBrands)
   .post(
     authServices.protect,
     authServices.allowedTo("manager", "admin"),
+    clearCache("/api/v1/brands"),
     uploadBrandImage,
     handleCloudinaryImages,
     createBrandValidator,
@@ -35,10 +37,11 @@ router
 
 router
   .route("/:id")
-  .get(getBrandValidator, getBrand)
+  .get(cacheResponse, getBrandValidator, getBrand)
   .put(
     authServices.protect,
     authServices.allowedTo("manager", "admin"),
+    clearCache("/api/v1/brands"),
     uploadBrandImage,
     handleCloudinaryImages,
     updateBrandValidator,
@@ -47,6 +50,7 @@ router
   .delete(
     authServices.protect,
     authServices.allowedTo("admin"),
+    clearCache("/api/v1/brands"),
     deleteBrandValidator,
     deleteBrand
   );

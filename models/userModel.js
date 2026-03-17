@@ -83,6 +83,12 @@ userSchema.pre("save", async function (next) {
   next();
 });
 
+// ─── Indexes ──────────────────────────────────────────────────────────────────
+// email already indexed via unique:true in the field definition
+userSchema.index({ active: 1 });
+userSchema.index({ passwordResetCode: 1 }, { sparse: true });
+userSchema.index({ emailVerificationCode: 1 }, { sparse: true });
+
 const User = mongoose.model("User", userSchema);
 
 module.exports = User;

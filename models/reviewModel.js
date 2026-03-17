@@ -72,4 +72,9 @@ reviewSchema.post("deleteOne", { document: true }, async function () {
   await this.constructor.calcAverageRatingsAndQuantity(this.product);
 });
 
+// ─── Indexes ──────────────────────────────────────────────────────────────────
+// Covers all "reviews for a product" queries + enforces one review per user per product
+reviewSchema.index({ product: 1, user: 1 }, { unique: true });
+reviewSchema.index({ product: 1 });
+
 module.exports = mongoose.model("Review", reviewSchema);

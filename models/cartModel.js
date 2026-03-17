@@ -27,4 +27,8 @@ const cartSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// ─── Indexes ──────────────────────────────────────────────────────────────────
+// sparse:true allows documents without a user field to coexist without violating uniqueness
+cartSchema.index({ user: 1 }, { unique: true, sparse: true });
+
 module.exports = mongoose.model("Cart", cartSchema);

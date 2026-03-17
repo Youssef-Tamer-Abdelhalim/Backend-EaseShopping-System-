@@ -59,4 +59,9 @@ orderSchema.pre(/^find/, function (next) {
   next();
 });
 
+// ─── Indexes ──────────────────────────────────────────────────────────────────
+// Covers "user's orders sorted by date" — the most common order query
+orderSchema.index({ user: 1, createdAt: -1 });
+orderSchema.index({ isPaid: 1, isDelivered: 1 });
+
 module.exports = mongoose.model("Order", orderSchema);

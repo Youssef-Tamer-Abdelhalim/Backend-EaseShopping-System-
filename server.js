@@ -6,9 +6,8 @@ require("./utils/env");
 const morgan = require("morgan");
 const compression = require("compression");
 const helmet = require("helmet");
-const mongoSanitize = require("express-mongo-sanitize");
-const xss = require("xss-clean");
 const cookieParser = require("cookie-parser");
+const sanitize = require("./middleware/sanitizeMiddleware");
 
 const dbConnection = require("./config/database");
 const globalErrorHandler = require("./middleware/errorMiddleware");
@@ -19,8 +18,16 @@ const { globalLimiter } = require("./middleware/rateLimitMiddleware");
 
 const mountRoute = require("./routes/index");
 
-// create a new express app instance and use express.json middleware to parse request bodies
 const app = express();
+
+// Morgan first — so every request is logged regardless of downstream errors
+if (process.env.NODE_ENV === "development") {
+  app.use(morgan("dev"));
+  console.log(`mode: ${process.env.NODE_ENV}`);
+} else if (process.env.NODE_ENV === "production") {
+  app.use(morgan("combined"));
+  console.log(`mode: ${process.env.NODE_ENV}`);
+}
 
 // checkout webhook - MUST be before CORS and express.json() middleware
 // Stripe sends raw body and no Origin header
@@ -54,22 +61,12 @@ app.use(express.json({ limit: "40kb" }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, "uploads")));
 
-// NoSQL injection protection — strip $ and . from req.body/params/query
-app.use(mongoSanitize());
+// NoSQL injection + XSS protection — custom middleware compatible with Express 5
+// (express-mongo-sanitize and xss-clean both fail on Express 5's read-only req.query)
+app.use(sanitize);
 
-// XSS protection — sanitize user input to prevent script injection
-app.use(xss());
-
-// Rate limiting — 100 requests per 15 minutes per IP
+// Rate limiting — 500 requests per 15 minutes per IP
 app.use("/api", globalLimiter);
-
-if (process.env.NODE_ENV === "development") {
-  app.use(morgan("dev"));
-  console.log(`mode: ${process.env.NODE_ENV}`);
-} else if (process.env.NODE_ENV === "production") {
-  app.use(morgan("combined"));
-  console.log(`mode: ${process.env.NODE_ENV}`);
-}
 
 // mount route
 mountRoute(app);

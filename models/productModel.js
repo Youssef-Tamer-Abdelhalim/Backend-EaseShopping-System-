@@ -93,4 +93,15 @@ productSchema.pre(/^find/, function (next) {
   next();
 });
 
+// ─── Indexes ──────────────────────────────────────────────────────────────────
+// Compound index covers the most common filter+sort pattern (by category, rating, price)
+productSchema.index({ category: 1, ratingsAverage: -1, price: 1 });
+productSchema.index({ brand: 1 });
+productSchema.index({ price: 1 });
+// Text index for full-text search — title weighted 10x higher than description
+productSchema.index(
+  { title: "text", description: "text" },
+  { weights: { title: 10, description: 1 }, name: "product_text_search" }
+);
+
 module.exports = mongoose.model("Product", productSchema);

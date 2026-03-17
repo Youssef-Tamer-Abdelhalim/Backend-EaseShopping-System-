@@ -27,4 +27,7 @@ const supCategorySchema = new mongoose.Schema(
 
 const SupCategoryModel = mongoose.model("SupCategory", supCategorySchema);
 
+// ─── Indexes ──────────────────────────────────────────────────────────────────
+supCategorySchema.index({ category: 1 });
+
 module.exports = SupCategoryModel;
