@@ -5,12 +5,12 @@ const ApiFeatures = require("../utils/apiFeatures");
 exports.deleteOne = Model => asyncHandler(async (req, res, next) => {
   const { id } = req.params;
 
-  const document = await Model.findByIdAndDelete(id);
+  const document = await Model.findById(id);
   if (!document) {
-    next(new ApiError(`no ${Model.modelName} for this id ${id}`, 404));
+    return next(new ApiError(`no ${Model.modelName} for this id ${id}`, 404));
   }
 
-  await document.deleteOne(); // to trigger the "deleteOne" event and run the post middleware 
+  await document.deleteOne(); // triggers post("deleteOne") middleware (e.g. review rating recalc)
 
   res.status(204).send();
 });
@@ -22,7 +22,7 @@ exports.updateOne = Model => asyncHandler(async (req, res, next) => {
     { new: true }
   );
   if (!document) {
-    next(new ApiError(`no ${Model.modelName} for this id ${req.params.id}`, 404));
+    return next(new ApiError(`no ${Model.modelName} for this id ${req.params.id}`, 404));
   }
   // to trigger the "save" event and run the post middleware
   await document.save();

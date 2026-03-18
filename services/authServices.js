@@ -21,6 +21,9 @@ exports.signUp = asyncHandler(async (req, res, next) => {
 
   const token = generateToken(user._id);
 
+  // لا نرسل الباسورد في الـ response
+  user.password = undefined;
+
   res.status(201).json({
     status: "success signup",
     data: {
@@ -41,6 +44,9 @@ exports.logIn = asyncHandler(async (req, res, next) => {
   }
 
   const token = generateToken(user._id);
+
+  // لا نرسل الباسورد في الـ response
+  user.password = undefined;
 
   res.status(200).json({
     status: "success login",

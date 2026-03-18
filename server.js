@@ -60,7 +60,7 @@ mountRoute(app);
 
 // handle 404 errors or any Route Not Found
 app.use((req, res, next) => {
-  next(new ApiError(`Can't find this route ${req.originalUrl}`, 400));
+  next(new ApiError(`Can't find this route ${req.originalUrl}`, 404));
 });
 
 // Global error handler middleware

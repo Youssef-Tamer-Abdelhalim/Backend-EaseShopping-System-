@@ -16,12 +16,17 @@
 ### الصور والملفات الثابتة
 
 ```
-Development: http://localhost:8000
-Production:  https://backend-easeshopping-system-production.up.railway.app
+الوضع الحالي (March 2026):
+- الصور الجديدة تُرفع على Cloudinary مباشرة (وليس داخل uploads المحلي).
+- أي حقل صورة في الـ API يرجع كرابط كامل جاهز للعرض (absolute URL).
+- لا تعمل prepend لـ BASE_URL قبل روابط الصور.
 
-مثال (Dev):  http://localhost:8000/products/product-image.jpeg
-مثال (Prod): https://backend-easeshopping-system-production.up.railway.app/products/product-image.jpeg
+أمثلة:
+https://res.cloudinary.com/<cloud-name>/image/upload/v123456/e-commerce/products/cover.webp
+https://res.cloudinary.com/<cloud-name>/image/upload/v123456/e-commerce/users/profile.jpg
 ```
+
+> ملاحظة: قد توجد بيانات قديمة بروابط محلية من `uploads/` في بعض السجلات القديمة فقط.
 
 ### Headers المطلوبة
 
@@ -46,6 +51,65 @@ Production:  https://backend-easeshopping-system-production.up.railway.app
 
 ---
 
+## 🖼️ تحديثات الصور (Breaking Changes - March 2026)
+
+### ملخص التغيير
+
+- تم استبدال التخزين المحلي للصور بنظام رفع مباشر إلى Cloudinary.
+- الـ Backend يحفظ ويعيد روابط Cloudinary داخل نفس حقول الصورة (مثل: `imageCover`, `images`, `image`, `profileImg`).
+- أي endpoint فيه رفع صورة لازم يكون `multipart/form-data`.
+
+### قيود ومعالجة الصور
+
+- الامتدادات المسموحة: `jpg`, `jpeg`, `png`, `webp`
+- أي ملف ليس `image/*` يتم رفضه بخطأ `400`.
+- الصور تُرفع داخل مجلدات:
+`e-commerce/products`, `e-commerce/categories`, `e-commerce/brands`, `e-commerce/users`
+- Cloudinary transformation الافتراضية:
+`width: 1000`, `height: 1000`, `crop: limit`
+
+### حقول الرفع المعتمدة لكل endpoint
+
+| Endpoint | Method | نوع الطلب | حقول الصور |
+| --- | --- | --- | --- |
+| `/products` | `POST` | `multipart/form-data` | `imageCover` (1 ملف - required), `images` (حتى 5 ملفات - optional) |
+| `/products/:id` | `PUT` | `multipart/form-data` | `imageCover` (اختياري), `images` (اختياري حتى 5) |
+| `/categories` | `POST` | `multipart/form-data` | `image` (1 ملف - required) |
+| `/categories/:id` | `PUT` | `multipart/form-data` | `image` (1 ملف - optional) |
+| `/brands` | `POST` | `multipart/form-data` | `image` (1 ملف - required) |
+| `/brands/:id` | `PUT` | `multipart/form-data` | `image` (1 ملف - optional) |
+| `/users` | `POST` | `multipart/form-data` | `profileImg` (1 ملف - optional) |
+| `/users/:id` | `PUT` | `multipart/form-data` | `profileImg` (1 ملف - optional) |
+| `/users/updateMe` | `PUT` | `multipart/form-data` | `profileImg` (1 ملف - optional) |
+
+### مثال Frontend (FormData)
+
+```javascript
+const formData = new FormData();
+formData.append("title", "iPhone 15 Pro");
+formData.append("description", "وصف طويل للمنتج...");
+formData.append("quantity", 50);
+formData.append("price", 50000);
+formData.append("category", "<category_id>");
+formData.append("imageCover", coverFile); // ملف واحد
+
+for (const file of galleryFiles) {
+  formData.append("images", file); // نفس المفتاح يتكرر
+}
+
+await API.post("/products", formData, {
+  headers: {
+    Authorization: `Bearer ${token}`,
+  },
+});
+```
+
+### ملاحظة مهمة في تحديث المنتجات
+
+عند إرسال `PUT /products/:id` كـ `multipart/form-data`، الحقول اللي مش موجودة في الـ request مش هتتأثر. يعني لو عايزين تعدلوا الـ `title` بس بدون ما تلمسوا الصور، ابعتوا `title` فقط.
+
+---
+
 ## 🔐 Authentication (المصادقة)
 
 ### 1. تسجيل مستخدم جديد
@@ -60,7 +124,8 @@ POST /auth/signup
 {
   "name": "أحمد محمد",
   "email": "ahmed@example.com",
-  "password": "password123"
+  "password": "password123",
+  "confirmPassword": "password123"
 }
 ```
 
@@ -211,12 +276,12 @@ Authorization: Bearer TOKEN
     "name": "أحمد محمد",
     "email": "ahmed@example.com",
     "phone": "01012345678",
-    "profileImg": "http://localhost:8000/users/user-image.jpeg",
+    "profileImg": "https://res.cloudinary.com/<cloud-name>/image/upload/v123456/e-commerce/users/user-image.jpeg",
     "role": "user",
     "wishlist": ["product_id_1", "product_id_2"],
     "addresses": [
       {
-        "addressId": "addr_id",
+        "_id": "addr_id",
         "alias": "المنزل",
         "details": "123 شارع النيل",
         "phone": "01012345678",
@@ -246,6 +311,23 @@ Authorization: Bearer TOKEN
 }
 ```
 
+**Response (200):**
+
+```json
+{
+  "data": {
+    "_id": "user_id",
+    "name": "أحمد محمود",
+    "slug": "أحمد-محمود",
+    "email": "ahmed.new@example.com",
+    "phone": "01098765432",
+    "role": "user",
+    "active": true,
+    "avatar": "أ"
+  }
+}
+```
+
 ### تغيير كلمة المرور
 
 ```http
@@ -259,16 +341,39 @@ Authorization: Bearer TOKEN
 {
   "currentPassword": "oldPassword123",
   "password": "newPassword123",
-  "passwordConfirm": "newPassword123"
+  "confirmPassword": "newPassword123"
 }
 ```
 
-### حذف الحساب
+**Success Response (200):**
+
+```json
+{
+  "status": "success",
+  "data": {
+    "user": {
+      "_id": "user_id",
+      "name": "أحمد محمد",
+      "email": "ahmed@example.com",
+      "role": "user",
+      "avatar": "أ"
+    },
+    "token": "new_jwt_token_here..."
+  }
+}
+```
+
+> ⚠️ **مهم:** لازم تحفظوا الـ token الجديد وتستبدلوا القديم فوراً، لأن الـ token القديم بيبقى غير صالح بعد تغيير كلمة المرور.
+
+### حذف الحساب (Soft Delete)
 
 ```http
 DELETE /users/deleteMe
 Authorization: Bearer TOKEN
 ```
+
+> ⚠️ **ملاحظة:** هذا الـ endpoint بيعمل **soft delete** (بيحوّل `active` إلى `false`). الحساب لا يُحذف نهائياً من قاعدة البيانات.
+> Response: `204 No Content`
 
 ---
 
@@ -283,9 +388,9 @@ GET /products
 **Query Parameters:**
 | Parameter | Type | Description | Example |
 |-----------|------|-------------|---------|
-| `page` | number | رقم الصفحة | `?page=1` |
-| `limit` | number | عدد العناصر في الصفحة | `?limit=10` |
-| `sort` | string | الترتيب | `?sort=-price` أو `?sort=price` |
+| `page` | number | رقم الصفحة (الافتراضي: 1) | `?page=1` |
+| `limit` | number | عدد العناصر في الصفحة (الافتراضي: 25) | `?limit=10` |
+| `sort` | string | الترتيب (الافتراضي: `createdAt` تصاعدي) | `?sort=-price` أو `?sort=price` |
 | `fields` | string | الحقول المطلوبة | `?fields=title,price,imageCover` |
 | `keyword` | string | البحث في العنوان والوصف | `?keyword=laptop` |
 | `price[gte]` | number | السعر أكبر من أو يساوي | `?price[gte]=100` |
@@ -305,7 +410,7 @@ GET /products?page=1&limit=10&sort=-price&keyword=phone&category=cat_id
 ```json
 {
   "results": 10,
-  "paginationResult": {
+  "pagination": {
     "currentPage": 1,
     "limit": 10,
     "numberOfPages": 5,
@@ -322,10 +427,10 @@ GET /products?page=1&limit=10&sort=-price&keyword=phone&category=cat_id
       "price": 50000,
       "priceAfterDiscount": 45000,
       "colors": ["Black", "Silver", "Gold"],
-      "imageCover": "http://localhost:8000/products/cover.jpeg",
+      "imageCover": "https://res.cloudinary.com/<cloud-name>/image/upload/v123456/e-commerce/products/cover.jpeg",
       "images": [
-        "http://localhost:8000/products/img1.jpeg",
-        "http://localhost:8000/products/img2.jpeg"
+        "https://res.cloudinary.com/<cloud-name>/image/upload/v123456/e-commerce/products/img1.jpeg",
+        "https://res.cloudinary.com/<cloud-name>/image/upload/v123456/e-commerce/products/img2.jpeg"
       ],
       "category": { "name": "الهواتف" },
       "subCategory": [{ "name": "هواتف ذكية" }],
@@ -358,7 +463,7 @@ GET /products/:id
     "price": 50000,
     "priceAfterDiscount": 45000,
     "colors": ["Black", "Silver", "Gold"],
-    "imageCover": "http://localhost:8000/products/cover.jpeg",
+    "imageCover": "https://res.cloudinary.com/<cloud-name>/image/upload/v123456/e-commerce/products/cover.jpeg",
     "images": ["..."],
     "category": { "name": "الهواتف" },
     "subCategory": [{ "name": "هواتف ذكية" }],
@@ -406,13 +511,13 @@ GET /categories
 ```json
 {
   "results": 10,
-  "paginationResult": { "..." },
+  "pagination": { "..." },
   "data": [
     {
       "_id": "cat_id",
       "name": "الإلكترونيات",
       "slug": "electronics",
-      "image": "http://localhost:8000/categories/electronics.jpeg"
+      "image": "https://res.cloudinary.com/<cloud-name>/image/upload/v123456/e-commerce/categories/electronics.jpeg"
     }
   ]
 }
@@ -461,13 +566,13 @@ GET /brands
 ```json
 {
   "results": 5,
-  "paginationResult": { "..." },
+  "pagination": { "..." },
   "data": [
     {
       "_id": "brand_id",
       "name": "Apple",
       "slug": "apple",
-      "image": "http://localhost:8000/brands/apple.jpeg"
+      "image": "https://res.cloudinary.com/<cloud-name>/image/upload/v123456/e-commerce/brands/apple.jpeg"
     }
   ]
 }
@@ -497,7 +602,7 @@ Authorization: Bearer TOKEN
 ```json
 {
   "status": "success",
-  "numOfCartItems": 3,
+  "numberOfItems": 3,
   "data": {
     "_id": "cart_id",
     "cartItems": [
@@ -507,7 +612,7 @@ Authorization: Bearer TOKEN
         "quantity": 2,
         "color": "Black",
         "price": 50000,
-        "productImage": "http://localhost:8000/products/img.jpeg",
+        "productImage": "https://res.cloudinary.com/<cloud-name>/image/upload/v123456/e-commerce/products/img.jpeg",
         "nameOfProduct": "iPhone 15 Pro",
         "description": "..."
       }
@@ -540,8 +645,7 @@ Authorization: Bearer TOKEN
 ```json
 {
   "status": "success",
-  "message": "Product added successfully",
-  "numOfCartItems": 4,
+  "numberOfItems": 4,
   "data": { "..." }
 }
 ```
@@ -601,7 +705,7 @@ Authorization: Bearer TOKEN
 
 ```json
 {
-  "coupon": "DISCOUNT20"
+  "couponName": "DISCOUNT20"
 }
 ```
 
@@ -610,8 +714,7 @@ Authorization: Bearer TOKEN
 ```json
 {
   "status": "success",
-  "message": "Coupon applied",
-  "numOfCartItems": 3,
+  "numberOfItems": 3,
   "data": {
     "totalCartPrice": 100000,
     "totalCartPriceAfterDiscount": 80000
@@ -654,12 +757,31 @@ Authorization: Bearer TOKEN
   "status": "success",
   "data": {
     "_id": "order_id",
-    "user": { "name": "...", "email": "..." },
-    "cartItems": ["..."],
+    "user": "user_id",
+    "cartItems": [
+      {
+        "product": "product_id",
+        "quantity": 1,
+        "color": "Black",
+        "price": 50000,
+        "productImage": "https://res.cloudinary.com/<cloud-name>/image/upload/v123456/e-commerce/products/img.jpeg",
+        "nameOfProduct": "iPhone 15 Pro",
+        "description": "..."
+      }
+    ],
     "taxPrice": 0,
-    "shippingPrice": 50,
-    "shippingAddress": { "..." },
-    "totalOrderPrice": 100050,
+    "shippingPrice": 0,
+    "shippingAddress": {
+      "details": "123 شارع النيل، الدور الخامس",
+      "phone": "01012345678",
+      "city": "القاهرة",
+      "postalCode": "12345",
+      "country": {
+        "code": "EG",
+        "name": "Egypt"
+      }
+    },
+    "totalOrderPrice": 100000,
     "paymentMethodType": "cash",
     "isPaid": false,
     "isDelivered": false,
@@ -706,10 +828,10 @@ Authorization: Bearer TOKEN
 
 > 💡 **ملاحظة:** قم بتوجيه المستخدم إلى `session.url` لإتمام الدفع
 
-### جلب طلباتي
+### جلب طلباتي (User)
 
 ```http
-GET /orders
+GET /orders/my-orders
 Authorization: Bearer TOKEN
 ```
 
@@ -718,7 +840,7 @@ Authorization: Bearer TOKEN
 ```json
 {
   "results": 5,
-  "paginationResult": { "..." },
+  "pagination": { "..." },
   "data": [
     {
       "_id": "order_id",
@@ -749,6 +871,34 @@ Authorization: Bearer TOKEN
     }
   ]
 }
+```
+
+### جلب كل الطلبات (Admin/Manager)
+
+```http
+GET /orders
+Authorization: Bearer TOKEN (Admin/Manager)
+```
+
+### جلب طلب واحد (Admin/Manager)
+
+```http
+GET /orders/:id
+Authorization: Bearer TOKEN (Admin/Manager)
+```
+
+### تعليم الطلب كمُسلَّم (Admin/Manager)
+
+```http
+PATCH /orders/:id/deliver
+Authorization: Bearer TOKEN (Admin/Manager)
+```
+
+### تعليم الطلب كمدفوع كاش (Admin/Manager)
+
+```http
+PATCH /orders/:id/pay
+Authorization: Bearer TOKEN (Admin/Manager)
 ```
 
 ---
@@ -794,6 +944,18 @@ Authorization: Bearer TOKEN
 }
 ```
 
+**Response (200):**
+
+```json
+{
+  "status": "success",
+  "message": "Product added to wishlist",
+  "data": ["product_id_1", "product_id_2", "product_id_3"]
+}
+```
+
+> 💡 **ملاحظة:** الـ `POST` بيرجع array of product IDs فقط. لجلب بيانات المنتجات الكاملة (title, price, imageCover) استخدم `GET /wishlist`.
+
 ### حذف منتج من الأمنيات
 
 ```http
@@ -820,7 +982,7 @@ Authorization: Bearer TOKEN
   "results": 2,
   "data": [
     {
-      "addressId": "addr_id",
+      "_id": "addr_id",
       "alias": "المنزل",
       "details": "123 شارع النيل",
       "phone": "01012345678",
@@ -850,6 +1012,25 @@ Authorization: Bearer TOKEN
 }
 ```
 
+**Response (200):**
+
+```json
+{
+  "status": "success",
+  "message": "Address added successfully",
+  "data": [
+    {
+      "_id": "addr_id",
+      "alias": "العمل",
+      "details": "456 شارع التحرير",
+      "phone": "01098765432",
+      "city": "الجيزة",
+      "postalCode": "54321"
+    }
+  ]
+}
+```
+
 ### حذف عنوان
 
 ```http
@@ -872,7 +1053,7 @@ GET /products/:productId/reviews
 ```json
 {
   "results": 10,
-  "paginationResult": { "..." },
+  "pagination": { "..." },
   "data": [
     {
       "_id": "review_id",
@@ -945,6 +1126,7 @@ Authorization: Bearer TOKEN (Admin/Manager)
 ```json
 {
   "results": 3,
+  "pagination": { "..." },
   "data": [
     {
       "_id": "coupon_id",
@@ -957,6 +1139,16 @@ Authorization: Bearer TOKEN (Admin/Manager)
 }
 ```
 
+### باقي Endpoints الكوبونات
+
+```http
+GET /coupons/:id
+POST /coupons
+PUT /coupons/:id
+DELETE /coupons/:id
+Authorization: Bearer TOKEN (Admin/Manager)
+```
+
 ---
 
 ## ❌ Error Responses
@@ -965,7 +1157,7 @@ Authorization: Bearer TOKEN (Admin/Manager)
 
 ```json
 {
-  "status": "error",
+  "status": "Fail | Error",
   "message": "رسالة الخطأ"
 }
 ```
@@ -987,7 +1179,7 @@ Authorization: Bearer TOKEN (Admin/Manager)
 
 ```json
 {
-  "status": "error",
+  "status": "Fail",
   "message": "You are not logged in Please log in to access this route"
 }
 ```
@@ -996,7 +1188,7 @@ Authorization: Bearer TOKEN (Admin/Manager)
 
 ```json
 {
-  "status": "error",
+  "status": "Fail",
   "message": "You are not authorized to access this route"
 }
 ```
@@ -1005,12 +1197,12 @@ Authorization: Bearer TOKEN (Admin/Manager)
 
 ```json
 {
-  "status": "error",
-  "message": "Validation Error",
   "errors": [
     {
-      "field": "email",
-      "message": "Invalid email format"
+      "type": "field",
+      "msg": "Invalid email format",
+      "path": "email",
+      "location": "body"
     }
   ]
 }
@@ -1139,4 +1331,4 @@ RO, RU, SA, SE, SG, SI, SK, TH, TN, TW, UA, US, ZA, ZM
 
 ---
 
-**آخر تحديث:** November 2025
+**آخر تحديث:** March 2026

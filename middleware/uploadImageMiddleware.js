@@ -44,8 +44,6 @@ exports.setCloudinaryUrls = (fields) => (req, res, next) => {
         } else {
           req.body[fieldName] = req.files[fieldName].map((img) => img.path);
         }
-      } else if (fieldName === "images") {
-        req.body[fieldName] = [];
       }
     });
   }
