@@ -112,6 +112,19 @@ await API.post("/products", formData, {
 
 ## 🔐 Authentication (المصادقة)
 
+> ⚠️ **تغيير مهم (March 2026):** تم تحديث نظام المصادقة بالكامل:
+> - التسجيل يتطلب **تأكيد البريد الإلكتروني** قبل تسجيل الدخول
+> - الـ Login بيرجع **Access Token** (في الـ response) + **Refresh Token** (كـ HttpOnly cookie)
+> - Rate Limiting: **20 طلب / 15 دقيقة** على كل auth endpoints
+
+### التدفق الكامل للتسجيل:
+
+```
+1. POST /auth/signup          → إنشاء حساب + إرسال كود تأكيد (6 أرقام)
+2. POST /auth/verifyemail     → تأكيد البريد بالكود → تسلم accessToken + refreshToken cookie
+3. POST /auth/login           → تسجيل دخول (بعد التأكيد فقط)
+```
+
 ### 1. تسجيل مستخدم جديد
 
 ```http
@@ -133,25 +146,75 @@ POST /auth/signup
 
 ```json
 {
-  "status": "success signup",
+  "status": "success",
+  "message": "Account created. Please check your email to verify your account.",
   "data": {
     "user": {
       "_id": "user_id",
       "name": "أحمد محمد",
-      "email": "ahmed@example.com",
-      "role": "user",
-      "active": true,
-      "wishlist": [],
-      "addresses": [],
-      "createdAt": "2025-01-01T00:00:00.000Z",
-      "avatar": "أ"
-    },
-    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+      "email": "ahmed@example.com"
+    }
   }
 }
 ```
 
-### 2. تسجيل الدخول
+> 💡 لا يتم إرجاع token عند التسجيل. لازم تأكد البريد أولاً.
+
+### 2. تأكيد البريد الإلكتروني
+
+```http
+POST /auth/verifyemail
+```
+
+**Request Body:**
+
+```json
+{
+  "verificationCode": "123456"
+}
+```
+
+> الكود المرسل على البريد مكون من **6 أرقام** وصالح لمدة **15 دقيقة**.
+
+**Success Response (200):**
+
+```json
+{
+  "status": "success",
+  "message": "Email verified successfully.",
+  "data": {
+    "user": { "_id": "...", "name": "...", "email": "...", "role": "user" },
+    "accessToken": "eyJhbG..."
+  }
+}
+```
+
+> 🍪 يتم أيضاً إرسال **refreshToken** كـ `HttpOnly` cookie تلقائياً.
+
+### 3. إعادة إرسال كود التأكيد
+
+```http
+POST /auth/resendverification
+```
+
+**Request Body:**
+
+```json
+{
+  "email": "ahmed@example.com"
+}
+```
+
+**Success Response (200):**
+
+```json
+{
+  "status": "success",
+  "message": "Verification code sent to your email."
+}
+```
+
+### 4. تسجيل الدخول
 
 ```http
 POST /auth/login
@@ -170,7 +233,7 @@ POST /auth/login
 
 ```json
 {
-  "status": "success login",
+  "status": "success",
   "data": {
     "user": {
       "_id": "user_id",
@@ -179,12 +242,54 @@ POST /auth/login
       "role": "user",
       "avatar": "أ"
     },
-    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+    "accessToken": "eyJhbG..."
   }
 }
 ```
 
-### 3. نسيت كلمة المرور
+> 🍪 يتم أيضاً إرسال **refreshToken** كـ `HttpOnly` cookie.
+>
+> ⚠️ إذا كان البريد غير مؤكد، سيرجع خطأ `403`:
+> `"Please verify your email before logging in..."`
+
+### 5. تجديد الـ Access Token
+
+```http
+POST /auth/refresh
+```
+
+لا يحتاج أي body. الـ refreshToken يُرسل تلقائياً من الـ cookie.
+
+**Success Response (200):**
+
+```json
+{
+  "status": "success",
+  "accessToken": "eyJhbG..."
+}
+```
+
+> 💡 استخدم هذا الـ endpoint لما الـ accessToken ينتهي بدل ما تطلب من المستخدم يعمل login تاني.
+
+### 6. تسجيل الخروج
+
+```http
+POST /auth/logout
+Authorization: Bearer TOKEN
+```
+
+**Success Response (200):**
+
+```json
+{
+  "status": "success",
+  "message": "Logged out successfully."
+}
+```
+
+> يتم حذف الـ refreshToken من الـ DB ومن الـ cookie.
+
+### 7. نسيت كلمة المرور
 
 ```http
 POST /auth/forgetpassword
@@ -203,11 +308,11 @@ POST /auth/forgetpassword
 ```json
 {
   "status": "success",
-  "message": "Password reset code sent to email!"
+  "message": "Password reset code sent to your email."
 }
 ```
 
-### 4. التحقق من كود إعادة التعيين
+### 8. التحقق من كود إعادة التعيين
 
 ```http
 POST /auth/verifyresetcode
@@ -221,16 +326,18 @@ POST /auth/verifyresetcode
 }
 ```
 
+> الكود مكون من **8 أرقام** وصالح لمدة **10 دقائق**.
+
 **Success Response (200):**
 
 ```json
 {
   "status": "success",
-  "message": "Password reset successful!"
+  "message": "Reset code verified."
 }
 ```
 
-### 5. إعادة تعيين كلمة المرور
+### 9. إعادة تعيين كلمة المرور
 
 ```http
 PUT /auth/resetpassword
@@ -251,10 +358,12 @@ PUT /auth/resetpassword
 ```json
 {
   "status": "success",
-  "message": "Password reset successful!",
-  "token": "new_jwt_token..."
+  "message": "Password reset successful.",
+  "accessToken": "new_access_token..."
 }
 ```
+
+> 🍪 يتم أيضاً إرسال **refreshToken** جديد كـ cookie.
 
 ---
 
@@ -358,12 +467,12 @@ Authorization: Bearer TOKEN
       "role": "user",
       "avatar": "أ"
     },
-    "token": "new_jwt_token_here..."
+    "accessToken": "new_jwt_token_here..."
   }
 }
 ```
 
-> ⚠️ **مهم:** لازم تحفظوا الـ token الجديد وتستبدلوا القديم فوراً، لأن الـ token القديم بيبقى غير صالح بعد تغيير كلمة المرور.
+> ⚠️ **مهم:** لازم تحفظوا الـ accessToken الجديد وتستبدلوا القديم فوراً.
 
 ### حذف الحساب (Soft Delete)
 
@@ -1225,16 +1334,17 @@ const BASE_URL =
 
 const API = axios.create({
   baseURL: BASE_URL,
+  withCredentials: true, // مهم لإرسال refreshToken cookie تلقائياً
   headers: {
     "Content-Type": "application/json",
   },
 });
 
-// إضافة Token تلقائياً لكل الطلبات
+// إضافة Access Token تلقائياً لكل الطلبات
 API.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token");
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+  const accessToken = localStorage.getItem("accessToken");
+  if (accessToken) {
+    config.headers.Authorization = `Bearer ${accessToken}`;
   }
   return config;
 });
@@ -1244,7 +1354,7 @@ API.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem("token");
+      localStorage.removeItem("accessToken");
       window.location.href = "/login";
     }
     return Promise.reject(error);
@@ -1287,7 +1397,7 @@ const API = axios.create({
 // تسجيل الدخول
 const login = async (email, password) => {
   const { data } = await API.post("/auth/login", { email, password });
-  localStorage.setItem("token", data.data.token);
+  localStorage.setItem("accessToken", data.data.accessToken);
   return data.data.user;
 };
 
