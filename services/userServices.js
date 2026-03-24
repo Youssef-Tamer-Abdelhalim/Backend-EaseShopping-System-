@@ -5,7 +5,7 @@ const User = require("../models/userModel");
 const factory = require("./handlersFactroy");
 const { uploadMixOfImages, setCloudinaryUrls } = require("../middleware/uploadImageMiddleware");
 const ApiError = require("../utils/apiError");
-const generateToken = require("../utils/generateToken");
+const { generateAccessToken, generateRefreshToken, hashToken } = require("../utils/generateToken");
 
 const imageFields = [
   { name: "profileImg", maxCount: 1 }
@@ -101,13 +101,25 @@ exports.updateLoggedUserPassword = asyncHandler(async (req, res, next) => {
     { new: true }
   );
 
-  const token = generateToken(user._id);
+  // Issue new access + refresh token pair (same flow as login/resetPassword)
+  const accessToken = generateAccessToken(user._id, user.role);
+  const refreshToken = generateRefreshToken(user._id);
+
+  user.refreshToken = hashToken(refreshToken);
+  await user.save({ validateBeforeSave: false });
+
+  res.cookie("refreshToken", refreshToken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+  });
 
   res.status(200).json({
     status: "success",
     data: {
       user,
-      token,
+      accessToken,
     },
   });
 });
